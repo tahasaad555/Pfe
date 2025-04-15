@@ -1,0 +1,11 @@
+# Backend (Spring Boot)
+campus-room-app131/target
+*.iml
+
+# Frontend (React)
+campusroom12/node_modules
+campusroom12/build
+
+# General
+.env
+.DS_Store
