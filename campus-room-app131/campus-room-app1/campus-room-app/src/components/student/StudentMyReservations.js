@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-
+import API from '../../api';
 import '../../styles/student-reservation.css';
 
 const StudentMyReservations = () => {
@@ -11,112 +11,158 @@ const StudentMyReservations = () => {
   const [filteredReservations, setFilteredReservations] = useState([]);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('date');
-  const [sortDirection, setSortDirection] = useState('asc');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
-  const [dateRange, setDateRange] = useState('upcoming');
+  const [dateFilter, setDateFilter] = useState('upcoming');
 
-  // Initialize state with localStorage on component mount
+  // Fetch reservations on component mount
   useEffect(() => {
-    const fetchReservations = async () => {
-      setIsLoading(true);
-      try {
-        const storedReservations = localStorage.getItem('studentReservations');
-        if (storedReservations) {
-          const parsedReservations = JSON.parse(storedReservations);
-          setReservations(parsedReservations);
-          setFilteredReservations(parsedReservations);
-        }
-      } catch (error) {
-        console.error('Error loading reservations:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchReservations();
   }, []);
+
+  // Fetch reservations from API with fallback to local storage
+  const fetchReservations = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // First try to use the API service
+      if (API.studentAPI && API.studentAPI.getMyReservations) {
+        const response = await API.studentAPI.getMyReservations();
+        console.log('Reservations from API:', response.data);
+        
+        // Format the data if needed
+        const formattedReservations = formatReservations(response.data);
+        setReservations(formattedReservations);
+        setFilteredReservations(formattedReservations);
+        
+        // Update localStorage as backup
+        localStorage.setItem('studentReservations', JSON.stringify(formattedReservations));
+      } else {
+        // If API method is not available, try direct endpoint
+        const response = await API.get('/api/student/my-reservations');
+        console.log('Reservations from direct API:', response.data);
+        
+        // Format the data if needed
+        const formattedReservations = formatReservations(response.data);
+        setReservations(formattedReservations);
+        setFilteredReservations(formattedReservations);
+        
+        // Update localStorage as backup
+        localStorage.setItem('studentReservations', JSON.stringify(formattedReservations));
+      }
+      
+    } catch (err) {
+      console.error('Error fetching reservations from API:', err);
+      setError('Failed to load reservations from server. Using local data.');
+      
+      // Fallback to localStorage
+      const storedReservations = localStorage.getItem('studentReservations');
+      if (storedReservations) {
+        const parsedReservations = JSON.parse(storedReservations);
+        setReservations(parsedReservations);
+        setFilteredReservations(parsedReservations);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Format API reservations to consistent format
+  const formatReservations = (apiReservations) => {
+    return apiReservations.map(res => {
+      // Create a standardized reservation object from API data
+      return {
+        id: res.id || '',
+        room: res.classroom || res.room || '',
+        date: res.date || '',
+        time: res.time || `${res.startTime || ''} - ${res.endTime || ''}`,
+        startTime: res.startTime || '',
+        endTime: res.endTime || '',
+        purpose: res.purpose || '',
+        notes: res.notes || '',
+        status: res.status || 'Pending',
+        classroomId: res.classroomId || ''
+      };
+    });
+  };
 
   // Apply filters, search, and sort whenever their states change
   useEffect(() => {
     let result = [...reservations];
     
-    // Apply date range filter
-    if (dateRange === 'upcoming') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      result = result.filter(r => new Date(r.date) >= today);
-    } else if (dateRange === 'past') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      result = result.filter(r => new Date(r.date) < today);
-    } else if (dateRange === 'today') {
-      const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
-      result = result.filter(r => r.date === todayString);
-    } else if (dateRange === 'thisWeek') {
-      const today = new Date();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-      
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
-      
+    // Apply status filter
+    if (filterStatus !== 'all') {
       result = result.filter(r => {
-        const reservationDate = new Date(r.date);
-        return reservationDate >= startOfWeek && reservationDate <= endOfWeek;
+        // Case insensitive status comparison
+        return r.status.toLowerCase() === filterStatus.toLowerCase();
       });
     }
     
-    // Apply status filter
-    if (filterStatus !== 'all') {
-      result = result.filter(r => r.status.toLowerCase() === filterStatus.toLowerCase());
+    // Apply date filter
+    if (dateFilter === 'upcoming') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      result = result.filter(r => new Date(r.date) >= today);
+    } else if (dateFilter === 'past') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      result = result.filter(r => new Date(r.date) < today);
     }
     
     // Apply search
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       result = result.filter(r => 
-        r.room.toLowerCase().includes(searchLower) ||
-        r.purpose.toLowerCase().includes(searchLower) ||
-        r.date.includes(searchLower) ||
-        r.time.toLowerCase().includes(searchLower)
+        (r.room && r.room.toLowerCase().includes(searchLower)) ||
+        (r.purpose && r.purpose.toLowerCase().includes(searchLower)) ||
+        (r.date && r.date.includes(searchLower)) ||
+        (r.time && r.time.toLowerCase().includes(searchLower))
       );
     }
     
-    // Apply sorting
-    result.sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortBy) {
-        case 'date':
-          comparison = new Date(a.date) - new Date(b.date);
-          break;
-        case 'room':
-          comparison = a.room.localeCompare(b.room);
-          break;
-        case 'status':
-          comparison = a.status.localeCompare(b.status);
-          break;
-        case 'purpose':
-          comparison = a.purpose.localeCompare(b.purpose);
-          break;
-        default:
-          comparison = 0;
-      }
-      
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-    
     setFilteredReservations(result);
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [reservations, filterStatus, searchTerm, sortBy, sortDirection, dateRange]);
+  }, [reservations, filterStatus, searchTerm, dateFilter]);
+
+  // Cancel reservation
+  const cancelReservation = async (id) => {
+    if (window.confirm('Are you sure you want to cancel this reservation?')) {
+      setIsLoading(true);
+      
+      try {
+        // Try using the API service
+        if (API.studentAPI && API.studentAPI.cancelReservation) {
+          await API.studentAPI.cancelReservation(id);
+        } else {
+          // Fallback to direct API call
+          await API.put(`/api/student/reservations/${id}/cancel`);
+        }
+        
+        // Update local state
+        const updatedReservations = reservations.map(r => 
+          r.id === id ? { ...r, status: 'Canceled' } : r
+        );
+        
+        setReservations(updatedReservations);
+        
+        // Update localStorage
+        localStorage.setItem('studentReservations', JSON.stringify(updatedReservations));
+        
+        // Close modal if open
+        if (showViewModal && selectedReservation && selectedReservation.id === id) {
+          setShowViewModal(false);
+        }
+      } catch (error) {
+        console.error('Error cancelling reservation:', error);
+        alert('Failed to cancel reservation. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
   // View reservation details
   const viewReservation = (id) => {
@@ -127,145 +173,50 @@ const StudentMyReservations = () => {
     }
   };
 
-  // Close view modal
-  const closeViewModal = () => {
-    setShowViewModal(false);
-    setSelectedReservation(null);
-  };
-
-  // Cancel reservation
-  const cancelReservation = (id) => {
-    if (window.confirm('Are you sure you want to cancel this reservation?')) {
-      const updatedReservations = reservations.filter(r => r.id !== id);
-      setReservations(updatedReservations);
-      
-      // Update localStorage
-      localStorage.setItem('studentReservations', JSON.stringify(updatedReservations));
-      
-      // Show success notification
-      const notification = document.createElement('div');
-      notification.className = 'notification success';
-      notification.innerHTML = '<i class="fas fa-check-circle"></i> Reservation cancelled successfully';
-      document.body.appendChild(notification);
-      
-      setTimeout(() => {
-        notification.classList.add('show');
-        setTimeout(() => {
-          notification.classList.remove('show');
-          setTimeout(() => {
-            document.body.removeChild(notification);
-          }, 300);
-        }, 3000);
-      }, 10);
-    }
-  };
-
-  // Handle sorting when column header is clicked
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      // Toggle direction if same column
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      // New column, default to ascending
-      setSortBy(column);
-      setSortDirection('asc');
-    }
-  };
-
-  // Redirect to reservation form
-  const goToReserve = () => {
-    navigate('/student/reserve');
-  };
-
-  // Handle pagination
-  const handlePageChange = (pageNumber) => {
-    setCurrentPage(pageNumber);
-  };
-
-  // Calculate pagination range
-  const totalPages = Math.ceil(filteredReservations.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredReservations.slice(indexOfFirstItem, indexOfLastItem);
-
-  // Pagination controls
-  const renderPagination = () => {
-    const pageNumbers = [];
-    
-    // If few pages, show all
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
+  // Handle edit reservation
+  const handleEditReservation = (reservation) => {
+    try {
+      // Check if the reservation can be edited
+      if (reservation.status.toLowerCase() !== 'pending') {
+        alert(`Cannot edit this reservation because its status is ${reservation.status}`);
+        return;
       }
-    } else {
-      // Complex pagination with ellipsis
-      if (currentPage <= 3) {
-        // Near start
-        for (let i = 1; i <= 4; i++) {
-          pageNumbers.push(i);
+      
+      // Extract startTime and endTime from the time field if they are not available directly
+      let startTime = reservation.startTime;
+      let endTime = reservation.endTime;
+      
+      if ((!startTime || !endTime) && reservation.time) {
+        const timeParts = reservation.time.split(' - ');
+        if (timeParts.length === 2) {
+          startTime = timeParts[0].trim();
+          endTime = timeParts[1].trim();
         }
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        // Near end
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pageNumbers.push(i);
-        }
-      } else {
-        // Middle
-        pageNumbers.push(1);
-        pageNumbers.push('...');
-        pageNumbers.push(currentPage - 1);
-        pageNumbers.push(currentPage);
-        pageNumbers.push(currentPage + 1);
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
       }
+      
+      // Prepare a complete reservation object for editing
+      const reservationForEdit = {
+        id: reservation.id,
+        classroom: reservation.room,
+        classroomId: reservation.classroomId,
+        date: reservation.date,
+        startTime: startTime,
+        endTime: endTime,
+        purpose: reservation.purpose,
+        notes: reservation.notes || '',
+        status: reservation.status
+      };
+      
+      // Store the reservation data in localStorage for the form to use
+      localStorage.setItem('editingReservation', JSON.stringify(reservationForEdit));
+      console.log('Saved reservation for editing:', reservationForEdit);
+      
+      // Navigate to the reservation form
+      navigate('/student/reserve?edit=true');
+    } catch (error) {
+      console.error("Error navigating to edit form:", error);
+      alert("Unable to edit reservation. Please try again.");
     }
-    
-    return (
-      <div className="pagination">
-        <button 
-          className="pagination-btn" 
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-        >
-          <i className="fas fa-chevron-left"></i> Previous
-        </button>
-        
-        <div className="pagination-numbers">
-          {pageNumbers.map((number, index) => (
-            number === '...' ? 
-              <span key={index} className="pagination-ellipsis">...</span> :
-              <button 
-                key={index}
-                className={`pagination-number ${currentPage === number ? 'active' : ''}`}
-                onClick={() => handlePageChange(number)}
-              >
-                {number}
-              </button>
-          ))}
-        </div>
-        
-        <button 
-          className="pagination-btn"
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-        >
-          Next <i className="fas fa-chevron-right"></i>
-        </button>
-      </div>
-    );
-  };
-
-  // Get status counts for the filter buttons
-  const statusCounts = {
-    all: reservations.length,
-    approved: reservations.filter(r => r.status.toLowerCase() === 'approved').length,
-    pending: reservations.filter(r => r.status.toLowerCase() === 'pending').length,
-    rejected: reservations.filter(r => r.status.toLowerCase() === 'rejected').length,
   };
 
   // Format date for display
@@ -273,409 +224,344 @@ const StudentMyReservations = () => {
     const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateString).toLocaleDateString('en-US', options);
   };
-  
-  // Calculate days remaining or overdue
-  const getDaysRemaining = (dateString) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const reservationDate = new Date(dateString);
-    reservationDate.setHours(0, 0, 0, 0);
-    
-    const timeDiff = reservationDate - today;
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    
-    if (daysDiff === 0) return 'Today';
-    if (daysDiff === 1) return 'Tomorrow';
-    if (daysDiff === -1) return 'Yesterday';
-    if (daysDiff < 0) return `${Math.abs(daysDiff)} days ago`;
-    return `in ${daysDiff} days`;
+
+  // Handle new reservation button click
+  const handleNewReservation = () => {
+    navigate('/student/reserve');
   };
-  
-  // Get appropriate icon for reservation purpose
-  const getPurposeIcon = (purpose) => {
-    if (!purpose) return 'fa-question-circle';
-    
-    const purposeLower = purpose.toLowerCase();
-    if (purposeLower.includes('study') && purposeLower.includes('group')) return 'fa-users';
-    if (purposeLower.includes('study')) return 'fa-book';
-    if (purposeLower.includes('meeting')) return 'fa-handshake';
-    if (purposeLower.includes('presentation')) return 'fa-presentation';
-    if (purposeLower.includes('project')) return 'fa-project-diagram';
-    
-    return 'fa-calendar-check';
+
+  // Get status counts for filter badges
+  const getStatusCount = (status) => {
+    if (status === 'all') return reservations.length;
+    return reservations.filter(r => r.status.toLowerCase() === status.toLowerCase()).length;
+  };
+
+  // Helper function to check if a reservation can be canceled
+  const canCancelReservation = (status) => {
+    const normalizedStatus = status.toLowerCase();
+    return normalizedStatus === 'pending' || normalizedStatus === 'approved';
+  };
+
+  // Helper function to check if a reservation can be edited
+  const canEditReservation = (status) => {
+    const normalizedStatus = status.toLowerCase();
+    return normalizedStatus === 'pending';
   };
 
   return (
     <div className="main-content">
-      {/* Page Header */}
-      <div className="section-header">
+      <div className="section-header d-flex justify-content-between align-items-center">
         <div>
           <h1>My Study Room Reservations</h1>
           <p>Manage all your study space reservations</p>
         </div>
-        <div className="section-actions">
-          <button className="btn-primary" onClick={goToReserve}>
-            <i className="fas fa-plus"></i> New Reservation
+        <div className="d-flex gap-2">
+          <button 
+            className="btn btn-outline-primary d-flex align-items-center" 
+            onClick={fetchReservations}
+            disabled={isLoading}
+          >
+            <i className="fas fa-sync-alt me-2"></i> Refresh
+          </button>
+          <button 
+            className="btn btn-primary d-flex align-items-center" 
+            onClick={handleNewReservation}
+          >
+            <i className="fas fa-plus me-2"></i> New Reservation
           </button>
         </div>
       </div>
       
-      {/* Filters and Search - Enhanced */}
-      <div className="filters-container">
-        <div className="filter-row">
-          <div className="status-filters">
-            <button 
-              className={`filter-btn ${filterStatus === 'all' ? 'active' : ''}`} 
-              onClick={() => setFilterStatus('all')}
-            >
-              All <span className="count">{statusCounts.all}</span>
-            </button>
-            <button 
-              className={`filter-btn ${filterStatus === 'approved' ? 'active' : ''}`} 
-              onClick={() => setFilterStatus('approved')}
-            >
-              <i className="fas fa-check-circle"></i> Approved <span className="count">{statusCounts.approved}</span>
-            </button>
-            <button 
-              className={`filter-btn ${filterStatus === 'pending' ? 'active' : ''}`} 
-              onClick={() => setFilterStatus('pending')}
-            >
-              <i className="fas fa-clock"></i> Pending <span className="count">{statusCounts.pending}</span>
-            </button>
-            <button 
-              className={`filter-btn ${filterStatus === 'rejected' ? 'active' : ''}`} 
-              onClick={() => setFilterStatus('rejected')}
-            >
-              <i className="fas fa-times-circle"></i> Rejected <span className="count">{statusCounts.rejected}</span>
-            </button>
+      {/* Filter tabs UI - matching the professor's interface */}
+      <div className="filter-tabs">
+        <div className="status-filter-tabs">
+          <button 
+            className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('all')}
+          >
+            All <span className="count-badge">{getStatusCount('all')}</span>
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'approved' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('approved')}
+          >
+            <i className="fas fa-check-circle me-1"></i> Approved <span className="count-badge">{getStatusCount('approved')}</span>
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'pending' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('pending')}
+          >
+            <i className="fas fa-clock me-1"></i> Pending <span className="count-badge">{getStatusCount('pending')}</span>
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'rejected' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('rejected')}
+          >
+            <i className="fas fa-times-circle me-1"></i> Rejected <span className="count-badge">{getStatusCount('rejected')}</span>
+          </button>
+          <button 
+            className={`filter-tab ${filterStatus === 'canceled' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('canceled')}
+          >
+            <i className="fas fa-ban me-1"></i> Canceled <span className="count-badge">{getStatusCount('canceled')}</span>
+          </button>
+        </div>
+
+        <div className="search-and-date-filter">
+          <div className="search-container">
+            <input 
+              type="text"
+              className="search-input"
+              placeholder="Search by room, purpose, date or time..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <i className="fas fa-search search-icon"></i>
+            {searchTerm && (
+              <button 
+                className="clear-search-btn"
+                onClick={() => setSearchTerm('')}
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            )}
           </div>
           
-          <div className="date-filters">
-            <select 
-              className="date-filter-select"
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-            >
-              <option value="all">All Dates</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="today">Today</option>
-              <option value="thisWeek">This Week</option>
-              <option value="past">Past</option>
-            </select>
-          </div>
-        </div>
-        
-        <div className="search-container">
-          <input 
-            type="text" 
-            placeholder="Search by room, purpose, date or time..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <i className="fas fa-search search-icon"></i>
-          {searchTerm && (
-            <button 
-              className="search-clear-btn"
-              onClick={() => setSearchTerm('')}
-              title="Clear search"
-            >
-              <i className="fas fa-times"></i>
-            </button>
-          )}
+          <select 
+            className="date-filter-select"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+          >
+            <option value="upcoming">Upcoming</option>
+            <option value="past">Past</option>
+            <option value="all">All Dates</option>
+          </select>
         </div>
       </div>
       
-      {/* Items Per Page Selector */}
       <div className="table-controls">
-        <div className="items-per-page">
-          <label htmlFor="items-per-page">Show</label>
+        <div className="entries-selector">
+          Show 
           <select 
-            id="items-per-page"
-            value={itemsPerPage}
+            value={itemsPerPage} 
             onChange={(e) => setItemsPerPage(Number(e.target.value))}
           >
             <option value={5}>5</option>
             <option value={10}>10</option>
-            <option value={20}>20</option>
+            <option value={25}>25</option>
             <option value={50}>50</option>
           </select>
-          <span>entries</span>
+          entries
         </div>
         
-        <div className="result-count">
-          Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredReservations.length)} of {filteredReservations.length} reservations
+        <div className="results-count">
+          Showing {filteredReservations.length} of {reservations.length} reservations
         </div>
       </div>
       
-      {/* Loading State */}
+      {/* Loading state */}
       {isLoading ? (
         <div className="loading-container">
-          <div className="loading-spinner"></div>
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
           <p>Loading reservations...</p>
+        </div>
+      ) : error ? (
+        <div className="error-alert">
+          <i className="fas fa-exclamation-triangle me-2"></i>
+          <span>{error}</span>
+          <button className="btn btn-sm btn-outline-primary ms-3" onClick={fetchReservations}>Try Again</button>
         </div>
       ) : (
         <>
-          {/* Reservations Table - Enhanced */}
-          <div className="data-table-container">
-            {filteredReservations.length === 0 ? (
-              <div className="no-results">
-                <i className="fas fa-calendar-times no-results-icon"></i>
-                <h3>No Reservations Found</h3>
-                <p>
-                  {searchTerm 
-                    ? "No reservations match your search criteria." 
-                    : filterStatus !== 'all' 
-                      ? `You don't have any ${filterStatus} reservations.` 
-                      : "You haven't made any study room reservations yet."}
-                </p>
-                {reservations.length === 0 && (
-                  <button className="btn-primary" onClick={goToReserve}>
-                    <i className="fas fa-plus"></i> Make Your First Reservation
-                  </button>
-                )}
+          {filteredReservations.length === 0 ? (
+            <div className="empty-state-container">
+              <div className="empty-state-icon">
+                <i className="fas fa-calendar-times"></i>
               </div>
-            ) : (
-              <div className="responsive-table">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleSort('room')} className="sortable-header">
-                        <div className="th-content">
-                          <i className="fas fa-door-open th-icon"></i> Room
-                          {sortBy === 'room' && (
-                            <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} sort-icon`}></i>
-                          )}
+              <h3>No Reservations Found</h3>
+              <p>
+                {searchTerm 
+                  ? "No reservations match your search criteria." 
+                  : filterStatus !== 'all' 
+                    ? `You don't have any ${filterStatus} reservations.` 
+                    : "You haven't made any study room reservations yet."}
+              </p>
+              {reservations.length === 0 && (
+                <button className="btn btn-primary mt-3" onClick={handleNewReservation}>
+                  <i className="fas fa-plus me-2"></i> Make Your First Reservation
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="reservation-table">
+                <thead>
+                  <tr>
+                    <th>Room</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReservations.map(reservation => (
+                    <tr key={reservation.id}>
+                      <td>{reservation.room}</td>
+                      <td>{formatDate(reservation.date)}</td>
+                      <td>{reservation.time}</td>
+                      <td>
+                        <div className="purpose-cell" title={reservation.purpose}>
+                          {reservation.purpose}
                         </div>
-                      </th>
-                      <th onClick={() => handleSort('date')} className="sortable-header">
-                        <div className="th-content">
-                          <i className="fas fa-calendar th-icon"></i> Date
-                          {sortBy === 'date' && (
-                            <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} sort-icon`}></i>
-                          )}
-                        </div>
-                      </th>
-                      <th>
-                        <div className="th-content">
-                          <i className="fas fa-clock th-icon"></i> Time
-                        </div>
-                      </th>
-                      <th onClick={() => handleSort('purpose')} className="sortable-header">
-                        <div className="th-content">
-                          <i className="fas fa-tasks th-icon"></i> Purpose
-                          {sortBy === 'purpose' && (
-                            <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} sort-icon`}></i>
-                          )}
-                        </div>
-                      </th>
-                      <th onClick={() => handleSort('status')} className="sortable-header">
-                        <div className="th-content">
-                          <i className="fas fa-info-circle th-icon"></i> Status
-                          {sortBy === 'status' && (
-                            <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} sort-icon`}></i>
-                          )}
-                        </div>
-                      </th>
-                      <th>
-                        <div className="th-content">
-                          <i className="fas fa-cog th-icon"></i> Actions
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentItems.map(reservation => (
-                      <tr key={reservation.id} className={`status-row-${reservation.status.toLowerCase()}`}>
-                        <td data-label="Room">
-                          <div className="cell-content">
-                            <div className="cell-main">{reservation.room}</div>
-                          </div>
-                        </td>
-                        <td data-label="Date">
-                          <div className="cell-content">
-                            <div className="cell-main">{formatDate(reservation.date)}</div>
-                            <div className="cell-sub">{getDaysRemaining(reservation.date)}</div>
-                          </div>
-                        </td>
-                        <td data-label="Time">
-                          <div className="cell-content">
-                            <div className="cell-main">{reservation.time}</div>
-                          </div>
-                        </td>
-                        <td data-label="Purpose">
-                          <div className="cell-content">
-                            <div className="cell-main">
-                              <i className={`fas ${getPurposeIcon(reservation.purpose)} purpose-icon`}></i>
-                              {reservation.purpose}
-                            </div>
-                          </div>
-                        </td>
-                        <td data-label="Status">
-                          <div className="cell-content">
-                            <span className={`status-badge status-${reservation.status.toLowerCase()}`}>
-                              {reservation.status === 'Approved' && <i className="fas fa-check-circle"></i>}
-                              {reservation.status === 'Pending' && <i className="fas fa-clock"></i>}
-                              {reservation.status === 'Rejected' && <i className="fas fa-times-circle"></i>}
-                              {reservation.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td data-label="Actions">
-                          <div className="table-actions">
+                      </td>
+                      <td>
+                        <span className={`status-badge status-${reservation.status.toLowerCase()}`}>
+                          {reservation.status === 'Approved' && <i className="fas fa-check-circle me-1"></i>}
+                          {reservation.status === 'Pending' && <i className="fas fa-clock me-1"></i>}
+                          {reservation.status === 'Rejected' && <i className="fas fa-times-circle me-1"></i>}
+                          {reservation.status === 'Canceled' && <i className="fas fa-ban me-1"></i>}
+                          {reservation.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <button 
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => viewReservation(reservation.id)}
+                            title="View details"
+                          >
+                            <i className="fas fa-eye"></i>
+                          </button>
+                          {canEditReservation(reservation.status) && (
                             <button 
-                              className="btn-table btn-view"
-                              onClick={() => viewReservation(reservation.id)}
-                              title="View details"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => handleEditReservation(reservation)}
+                              title="Edit reservation"
                             >
-                              <i className="fas fa-eye"></i> View
+                              <i className="fas fa-edit"></i>
                             </button>
-                            {reservation.status === 'Pending' && (
-                              <button 
-                                className="btn-table btn-edit"
-                                onClick={() => navigate(`/student/reserve?edit=${reservation.id}`)}
-                                title="Edit reservation"
-                              >
-                                <i className="fas fa-edit"></i> Edit
-                              </button>
-                            )}
-                            {(reservation.status === 'Pending' || reservation.status === 'Approved') && (
-                              <button 
-                                className="btn-table btn-delete"
-                                onClick={() => cancelReservation(reservation.id)}
-                                title="Cancel reservation"
-                              >
-                                <i className="fas fa-times"></i> Cancel
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          
-          {/* Pagination - Enhanced */}
-          {filteredReservations.length > itemsPerPage && renderPagination()}
+                          )}
+                          {canCancelReservation(reservation.status) && (
+                            <button 
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => cancelReservation(reservation.id)}
+                              title="Cancel reservation"
+                              disabled={isLoading}
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
       
-      {/* View Modal */}
+      {/* View Reservation Modal */}
       {showViewModal && selectedReservation && (
-        <div className="modal-backdrop active">
-          <div className="modal reservation-modal">
+        <div className="modal-overlay" onClick={() => setShowViewModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">
-                <i className="fas fa-info-circle"></i> Reservation Details
-              </h3>
-              <button className="modal-close" onClick={closeViewModal}>
+              <h4 className="modal-title">Reservation Details</h4>
+              <button 
+                className="modal-close-btn"
+                onClick={() => setShowViewModal(false)}
+              >
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            
             <div className="modal-body">
-              <div className="reservation-details">
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-door-open"></i> Room</div>
-                  <div className="detail-value">{selectedReservation.room}</div>
-                </div>
-                
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-calendar"></i> Date</div>
-                  <div className="detail-value">{formatDate(selectedReservation.date)}</div>
-                </div>
-                
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-clock"></i> Time</div>
-                  <div className="detail-value">{selectedReservation.time}</div>
-                </div>
-                
-                <div className="detail-item">
-                  <div className="detail-label">
-                    <i className={`fas ${getPurposeIcon(selectedReservation.purpose)}`}></i> Purpose
-                  </div>
-                  <div className="detail-value">{selectedReservation.purpose}</div>
-                </div>
-                
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-tag"></i> Status</div>
-                  <div className="detail-value">
-                    <span className={`status-badge status-${selectedReservation.status.toLowerCase()}`}>
-                      {selectedReservation.status === 'Approved' && <i className="fas fa-check-circle"></i>}
-                      {selectedReservation.status === 'Pending' && <i className="fas fa-clock"></i>}
-                      {selectedReservation.status === 'Rejected' && <i className="fas fa-times-circle"></i>}
-                      {selectedReservation.status}
-                    </span>
-                  </div>
-                </div>
-                
-                {selectedReservation.notes && (
-                  <div className="detail-item">
-                    <div className="detail-label"><i className="fas fa-comment"></i> Notes</div>
-                    <div className="detail-value">{selectedReservation.notes}</div>
-                  </div>
-                )}
-                
-                {selectedReservation.status === 'Approved' && (
-                  <div className="detail-note success">
-                    <div className="detail-note-content">
-                      <strong>Room Access Instructions:</strong>
-                      <p>You can access the room using your student ID. Please remember to leave the room clean and organized after use.</p>
-                    </div>
-                  </div>
-                )}
-                
-                {selectedReservation.status === 'Pending' && (
-                  <div className="detail-note">
-                    <div className="detail-note-content">
-                      <strong>Note:</strong>
-                      <p>Your reservation is currently pending approval. You will receive an email notification once it has been processed.</p>
-                    </div>
-                  </div>
-                )}
-                
-                {selectedReservation.status === 'Rejected' && (
-                  <div className="detail-note warning">
-                    <div className="detail-note-content">
-                      <strong>Note:</strong>
-                      <p>Your reservation was rejected. This could be due to scheduling conflicts or room availability. Please try reserving another room or time slot.</p>
-                    </div>
-                  </div>
-                )}
+              <div className="detail-row">
+                <div className="detail-label">Room:</div>
+                <div className="detail-value">{selectedReservation.room}</div>
               </div>
+              <div className="detail-row">
+                <div className="detail-label">Date:</div>
+                <div className="detail-value">{formatDate(selectedReservation.date)}</div>
+              </div>
+              <div className="detail-row">
+                <div className="detail-label">Time:</div>
+                <div className="detail-value">{selectedReservation.time}</div>
+              </div>
+              <div className="detail-row">
+                <div className="detail-label">Purpose:</div>
+                <div className="detail-value">{selectedReservation.purpose}</div>
+              </div>
+              <div className="detail-row">
+                <div className="detail-label">Status:</div>
+                <div className="detail-value">
+                  <span className={`status-badge status-${selectedReservation.status.toLowerCase()}`}>
+                    {selectedReservation.status === 'Approved' && <i className="fas fa-check-circle me-1"></i>}
+                    {selectedReservation.status === 'Pending' && <i className="fas fa-clock me-1"></i>}
+                    {selectedReservation.status === 'Rejected' && <i className="fas fa-times-circle me-1"></i>}
+                    {selectedReservation.status === 'Canceled' && <i className="fas fa-ban me-1"></i>}
+                    {selectedReservation.status}
+                  </span>
+                </div>
+              </div>
+              {selectedReservation.notes && (
+                <div className="detail-row">
+                  <div className="detail-label">Notes:</div>
+                  <div className="detail-value">{selectedReservation.notes}</div>
+                </div>
+              )}
+              
+              {selectedReservation.status.toLowerCase() === 'approved' && (
+                <div className="status-message success">
+                  <i className="fas fa-info-circle me-1"></i>
+                  Your reservation has been approved. You can access the room using your student ID card.
+                </div>
+              )}
+              
+              {selectedReservation.status.toLowerCase() === 'pending' && (
+                <div className="status-message pending">
+                  <i className="fas fa-info-circle me-1"></i>
+                  Your reservation is currently pending approval. You'll be notified when it's processed.
+                </div>
+              )}
+              
+              {selectedReservation.status.toLowerCase() === 'rejected' && (
+                <div className="status-message error">
+                  <i className="fas fa-info-circle me-1"></i>
+                  Your reservation has been rejected. Please try another time or contact administration.
+                </div>
+              )}
             </div>
-            
             <div className="modal-footer">
-              {selectedReservation.status === 'Pending' && (
+              {canEditReservation(selectedReservation.status) && (
                 <button 
-                  className="modal-btn btn-secondary"
+                  className="btn btn-secondary"
                   onClick={() => {
-                    closeViewModal();
-                    navigate(`/student/reserve?edit=${selectedReservation.id}`);
+                    setShowViewModal(false);
+                    handleEditReservation(selectedReservation);
                   }}
                 >
-                  <i className="fas fa-edit"></i> Edit Reservation
+                  Edit Reservation
                 </button>
               )}
-              
-              {(selectedReservation.status === 'Pending' || selectedReservation.status === 'Approved') && (
+              {canCancelReservation(selectedReservation.status) && (
                 <button 
-                  className="modal-btn btn-danger"
-                  onClick={() => {
-                    cancelReservation(selectedReservation.id);
-                    closeViewModal();
-                  }}
+                  className="btn btn-danger"
+                  onClick={() => cancelReservation(selectedReservation.id)}
+                  disabled={isLoading}
                 >
-                  <i className="fas fa-times"></i> Cancel Reservation
+                  {isLoading ? 'Processing...' : 'Cancel Reservation'}
                 </button>
               )}
-              
-              <button className="modal-btn btn-primary" onClick={closeViewModal}>
-                <i className="fas fa-check"></i> Close
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowViewModal(false)}
+              >
+                Close
               </button>
             </div>
           </div>

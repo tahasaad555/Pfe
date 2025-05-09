@@ -3,6 +3,7 @@ package com.campusroom.service;
 import com.campusroom.dto.ClassroomDTO;
 import com.campusroom.dto.ReservationDTO;
 import com.campusroom.dto.ReservationRequestDTO;
+import com.campusroom.dto.SystemSettingsDTO;
 import com.campusroom.model.Classroom;
 import com.campusroom.model.Notification;
 import com.campusroom.model.Reservation;
@@ -12,13 +13,11 @@ import com.campusroom.repository.NotificationRepository;
 import com.campusroom.repository.ReservationRepository;
 import com.campusroom.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-// Add this import at the top
-import org.springframework.beans.factory.annotation.Autowired;
-import com.campusroom.service.ReservationEmailService;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -43,9 +42,19 @@ public class ProfessorReservationService {
     @Autowired
     private NotificationRepository notificationRepository;
 
-    // Then add this field in the class
-@Autowired
-private ReservationEmailService reservationEmailService;
+    @Autowired
+    private ReservationEmailService reservationEmailService;
+    
+    @Autowired
+    private SystemSettingsProvider settingsProvider;
+    
+    private SystemSettingsDTO currentSettings;
+    
+    @EventListener(SystemSettingsProvider.SettingsChangedEvent.class)
+    public void handleSettingsChange(SystemSettingsProvider.SettingsChangedEvent event) {
+        this.currentSettings = event.getSettings();
+        System.out.println("ProfessorReservationService: Settings updated");
+    }
 
     /**
      * Récupère les réservations du professeur connecté
@@ -105,54 +114,159 @@ private ReservationEmailService reservationEmailService;
         }
     }
 
-    // Then modify the createReservationRequest method to include email notification
-@Transactional
-public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO) {
-    System.out.println("Création d'une demande de réservation: " + requestDTO);
+       @Transactional
+    public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO) {
+        System.out.println("Creating reservation request: " + requestDTO);
 
-    try {
-        User currentUser = getCurrentUser();
-        Classroom classroom = classroomRepository.findById(requestDTO.getClassroomId())
-                .orElseThrow(() -> new RuntimeException("Classroom not found with id: " + requestDTO.getClassroomId()));
-
-        // Convertir la date
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        Date date = dateFormat.parse(requestDTO.getDate());
-
-        // Vérifier qu'il n'y a pas de conflit
-        if (hasConflictingReservation(classroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
-            throw new RuntimeException("Cette salle n'est plus disponible pour cette plage horaire");
+        // Ensure settings are loaded
+        if (currentSettings == null) {
+            currentSettings = settingsProvider.getSettings();
         }
 
-        // Créer la réservation avec un ID UUID
-        Reservation reservation = new Reservation();
-        reservation.setId(UUID.randomUUID().toString());
-        reservation.setUser(currentUser);
-        reservation.setClassroom(classroom);
-        reservation.setDate(date);
-        reservation.setStartTime(requestDTO.getStartTime());
-        reservation.setEndTime(requestDTO.getEndTime());
-        reservation.setPurpose(requestDTO.getPurpose());
-        reservation.setStatus("PENDING"); // Statut initial: en attente d'approbation
+        try {
+            User currentUser = getCurrentUser();
+            Classroom classroom = classroomRepository.findById(requestDTO.getClassroomId())
+                    .orElseThrow(() -> new RuntimeException("Classroom not found with id: " + requestDTO.getClassroomId()));
 
-        Reservation savedReservation = reservationRepository.save(reservation);
-        System.out.println("Réservation créée avec succès: " + savedReservation.getId());
+            // Convert the date
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            Date date = dateFormat.parse(requestDTO.getDate());
 
-        // Créer une notification pour les administrateurs
-        createAdminNotification(savedReservation);
-        
-        // Envoyer un email aux administrateurs - AJOUT
-        List<User> admins = userRepository.findByRole(User.Role.ADMIN);
-        reservationEmailService.notifyAdminsAboutNewReservation(savedReservation, admins);
+            // Validate based on settings
+            validateReservationRequest(requestDTO, date);
 
-        return convertToReservationDTO(savedReservation);
+            // Check for conflicts
+            if (hasConflictingReservation(classroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
+                throw new RuntimeException("This classroom is no longer available for this time slot");
+            }
 
-    } catch (ParseException e) {
-        System.err.println("Erreur lors de la conversion de la date: " + e.getMessage());
-        e.printStackTrace();
-        throw new RuntimeException("Format de date invalide: " + requestDTO.getDate());
+            // Create the reservation with UUID
+            Reservation reservation = new Reservation();
+            reservation.setId(UUID.randomUUID().toString());
+            reservation.setUser(currentUser);
+            reservation.setClassroom(classroom);
+            reservation.setDate(date);
+            reservation.setStartTime(requestDTO.getStartTime());
+            reservation.setEndTime(requestDTO.getEndTime());
+            reservation.setPurpose(requestDTO.getPurpose());
+            reservation.setNotes(requestDTO.getNotes());
+            
+            // Set status based on settings - auto-approve or pending
+            if (currentUser.getRole() == User.Role.PROFESSOR && !currentSettings.isProfessorRequireApproval()) {
+                reservation.setStatus("APPROVED");
+            } else {
+                reservation.setStatus("PENDING");
+            }
+
+            Reservation savedReservation = reservationRepository.save(reservation);
+            System.out.println("Reservation created successfully: " + savedReservation.getId());
+
+            // Create admin notification for pending reservations
+            if ("PENDING".equals(savedReservation.getStatus())) {
+                createAdminNotification(savedReservation);
+                
+                // Send email to admins if notifications are enabled
+                if (currentSettings.isEmailNotifications() && 
+                    currentSettings.isReservationCreated()) {
+                    List<User> admins = userRepository.findByRole(User.Role.ADMIN);
+                    reservationEmailService.notifyAdminsAboutNewReservation(savedReservation, admins);
+                }
+            }
+
+            return convertToReservationDTO(savedReservation);
+
+        } catch (ParseException e) {
+            System.err.println("Date conversion error: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Invalid date format: " + requestDTO.getDate());
+        }
     }
-}
+
+    // Similar validation method as in StudentReservationService
+    private void validateReservationRequest(ReservationRequestDTO requestDTO, Date requestDate) {
+        // Similar validation logic using currentSettings
+    }
+    /**
+     * Modifie une demande de réservation existante
+     * Nouvelle méthode ajoutée pour permettre la modification
+     */
+    @Transactional
+    public ReservationDTO editReservationRequest(String id, ReservationRequestDTO requestDTO) {
+        System.out.println("Modification d'une demande de réservation: " + id);
+        System.out.println("Nouvelles données: " + requestDTO);
+        
+        try {
+            // Vérifier que l'utilisateur courant est bien le propriétaire de la réservation
+            User currentUser = getCurrentUser();
+            
+            Reservation reservation = reservationRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Reservation not found with id: " + id));
+            
+            // Vérifier que c'est bien la réservation de l'utilisateur courant
+            if (!reservation.getUser().getId().equals(currentUser.getId())) {
+                throw new RuntimeException("Vous n'êtes pas autorisé à modifier cette réservation");
+            }
+            
+            // Vérifier que la réservation est encore en statut PENDING
+            if (!"PENDING".equals(reservation.getStatus())) {
+                throw new RuntimeException("Seules les réservations en attente peuvent être modifiées");
+            }
+            
+            // Vérifier si la salle a changé
+            boolean classroomChanged = false;
+            Classroom newClassroom = null;
+            
+            if (requestDTO.getClassroomId() != null && 
+                !requestDTO.getClassroomId().equals(reservation.getClassroom().getId())) {
+                classroomChanged = true;
+                newClassroom = classroomRepository.findById(requestDTO.getClassroomId())
+                    .orElseThrow(() -> new RuntimeException("Classroom not found with id: " + requestDTO.getClassroomId()));
+            } else {
+                newClassroom = reservation.getClassroom();
+            }
+            
+            // Convertir la date
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            Date date = dateFormat.parse(requestDTO.getDate());
+            
+            // Vérifier les conflits de réservation pour la nouvelle plage horaire
+            if (classroomChanged || 
+                !dateFormat.format(reservation.getDate()).equals(requestDTO.getDate()) ||
+                !reservation.getStartTime().equals(requestDTO.getStartTime()) ||
+                !reservation.getEndTime().equals(requestDTO.getEndTime())) {
+                
+                if (hasConflictingReservation(newClassroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
+                    throw new RuntimeException("La salle n'est pas disponible pour cette plage horaire");
+                }
+            }
+            
+            // Mettre à jour la réservation avec les nouvelles valeurs
+            reservation.setClassroom(newClassroom);
+            reservation.setDate(date);
+            reservation.setStartTime(requestDTO.getStartTime());
+            reservation.setEndTime(requestDTO.getEndTime());
+            reservation.setPurpose(requestDTO.getPurpose());
+            
+            if (requestDTO.getNotes() != null) {
+                reservation.setNotes(requestDTO.getNotes());
+            }
+            
+            // Enregistrer les modifications
+            Reservation updatedReservation = reservationRepository.save(reservation);
+            System.out.println("Réservation mise à jour avec succès: " + updatedReservation.getId());
+            
+            // Créer une notification pour les administrateurs pour la mise à jour
+            createAdminUpdateNotification(updatedReservation);
+            
+            return convertToReservationDTO(updatedReservation);
+            
+        } catch (ParseException e) {
+            System.err.println("Erreur lors de la conversion de la date: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Format de date invalide: " + requestDTO.getDate());
+        }
+    }
+
     /**
      * Annule une réservation
      */
@@ -180,6 +294,11 @@ public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO)
             e.printStackTrace();
         }
 
+        // Vérifier que le statut est PENDING ou APPROVED
+        if (!"PENDING".equals(reservation.getStatus()) && !"APPROVED".equals(reservation.getStatus())) {
+            throw new RuntimeException("Impossible d'annuler une réservation de statut " + reservation.getStatus());
+        }
+
         // Mettre à jour le statut
         reservation.setStatus("CANCELED");
         Reservation updatedReservation = reservationRepository.save(reservation);
@@ -194,40 +313,70 @@ public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO)
     /**
      * Vérifie s'il y a des réservations en conflit pour une salle donnée
      */
-    private boolean hasConflictingReservation(Classroom classroom, Date date, String startTime, String endTime) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String dateStr = dateFormat.format(date);
-
-        // Convertir en minutes pour faciliter la comparaison
-        int requestStartMinutes = convertTimeToMinutes(startTime);
-        int requestEndMinutes = convertTimeToMinutes(endTime);
-
-        // Trouver toutes les réservations approuvées ou en attente pour cette salle à cette date
-        List<Reservation> existingReservations = reservationRepository.findByClassroomAndDateAndStatusIn(
-                classroom, date, List.of("APPROVED", "PENDING"));
-
-        // Vérifier s'il y a des conflits
-        for (Reservation res : existingReservations) {
-            int resStartMinutes = convertTimeToMinutes(res.getStartTime());
-            int resEndMinutes = convertTimeToMinutes(res.getEndTime());
-
-            // Vérifier si les plages horaires se chevauchent
-            if (!(requestEndMinutes <= resStartMinutes || requestStartMinutes >= resEndMinutes)) {
-                System.out.println("Conflit trouvé avec la réservation: " + res.getId());
-                return true;
-            }
-        }
-
-        return false;
+ /**
+ * Vérifie s'il y a des réservations en conflit pour une salle donnée
+ */
+private boolean hasConflictingReservation(Classroom classroom, Date date, String startTime, String endTime) {
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    String dateStr = dateFormat.format(date);
+    
+    // Basic validation first
+    int requestStartMinutes = convertTimeToMinutes(startTime);
+    int requestEndMinutes = convertTimeToMinutes(endTime);
+    
+    // Check for invalid time range
+    if (requestEndMinutes <= requestStartMinutes) {
+        throw new RuntimeException("Invalid time range: end time must be after start time");
     }
-
+    
+    // Find all approved or pending reservations for this classroom on this date
+    List<Reservation> existingReservations = reservationRepository.findByClassroomAndDateAndStatusIn(
+            classroom, date, List.of("APPROVED", "PENDING"));
+    
+    // Check each existing reservation for overlap
+    for (Reservation res : existingReservations) {
+        int resStartMinutes = convertTimeToMinutes(res.getStartTime());
+        int resEndMinutes = convertTimeToMinutes(res.getEndTime());
+        
+        // Time ranges overlap if:
+        // 1. New reservation starts during existing reservation, OR
+        // 2. New reservation ends during existing reservation, OR
+        // 3. New reservation completely contains existing reservation
+        
+        // The NOT overlapping condition is: new end <= existing start OR new start >= existing end
+        // Therefore, overlapping is: new end > existing start AND new start < existing end
+        if (requestEndMinutes > resStartMinutes && requestStartMinutes < resEndMinutes) {
+            System.out.println("Conflict found with reservation: " + res.getId());
+            System.out.println("Requested time: " + startTime + " - " + endTime);
+            System.out.println("Conflicting time: " + res.getStartTime() + " - " + res.getEndTime());
+            return true;
+        }
+    }
+    
+    return false;
+}
     /**
      * Convertit une heure au format "HH:mm" en minutes depuis minuit
      */
-    private int convertTimeToMinutes(String time) {
-        String[] parts = time.split(":");
-        return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+  /**
+ * Convertit une heure au format "HH:mm" en minutes depuis minuit
+ * Handles edge cases and validation better
+ */
+private int convertTimeToMinutes(String time) {
+    if (time == null || !time.matches("^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")) {
+        throw new RuntimeException("Invalid time format: " + time + ". Expected format is HH:MM");
     }
+    
+    String[] parts = time.split(":");
+    int hours = Integer.parseInt(parts[0]);
+    int minutes = Integer.parseInt(parts[1]);
+    
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        throw new RuntimeException("Invalid time values: hours must be 0-23, minutes must be 0-59");
+    }
+    
+    return hours * 60 + minutes;
+}
 
     /**
      * Crée une notification pour les administrateurs concernant une nouvelle
@@ -248,6 +397,30 @@ public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO)
             notification.setRead(false);
             notification.setIconClass("fas fa-calendar-plus");
             notification.setIconColor("blue");
+
+            notificationRepository.save(notification);
+        }
+    }
+    
+    /**
+     * Crée une notification pour les administrateurs concernant une mise à jour
+     * d'une demande de réservation
+     */
+    private void createAdminUpdateNotification(Reservation reservation) {
+        // Trouver tous les utilisateurs avec le rôle ADMIN
+        List<User> admins = userRepository.findByRole(User.Role.ADMIN);
+
+        for (User admin : admins) {
+            Notification notification = new Notification();
+            notification.setTitle("Demande de réservation modifiée");
+            notification.setMessage("Le professeur " + reservation.getUser().getFirstName() + " "
+                    + reservation.getUser().getLastName() + " a modifié sa demande de réservation pour la salle "
+                    + reservation.getClassroom().getRoomNumber() + " le "
+                    + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate()) + ".");
+            notification.setUser(admin);
+            notification.setRead(false);
+            notification.setIconClass("fas fa-edit");
+            notification.setIconColor("orange");
 
             notificationRepository.save(notification);
         }
@@ -316,6 +489,7 @@ public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO)
                 .type(classroom.getType())
                 .capacity(classroom.getCapacity())
                 .features(classroom.getFeatures())
+                .image(classroom.getImage())
                 .build();
     }
 }

@@ -48,7 +48,14 @@ const Login = () => {
       if (result.success) {
         redirectBasedOnRole(result.user.role.toLowerCase());
       } else {
+        // Display the error message from the server
         setError(result.message);
+        
+        // Specifically handle inactive account message
+        if (result.message && result.message.includes("n'est pas activé")) {
+          // You could add special styling or additional info for inactive accounts
+          console.log("Account is inactive");
+        }
       }
     } catch (err) {
       setError('Failed to log in');

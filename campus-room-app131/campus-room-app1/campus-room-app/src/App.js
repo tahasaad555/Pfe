@@ -15,17 +15,20 @@ import ProfessorDashboard from './components/professor/ProfessorDashboard';
 import StudentDashboard from './components/student/StudentDashboard';
 import AdminClassrooms from './components/admin/AdminClassrooms';
 
+// Profile Component
+import Profile from './components/common/Profile'; // Make sure this path matches your actual Profile component location
+
 // Context Provider
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { currentUser } = useAuth();
-  
+
   if (!currentUser) {
     return <Navigate to="/" />;
   }
-  
+
   if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
     // Redirect to the appropriate dashboard based on role
     switch(currentUser.role) {
@@ -39,7 +42,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         return <Navigate to="/" />;
     }
   }
-  
+
   return children;
 };
 
@@ -54,7 +57,17 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            
+
+            {/* Profile Route - Accessible to all authenticated users */}
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'professor', 'student']}>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+
             {/* Protected Routes */}
             <Route 
               path="/admin/*" 
@@ -64,7 +77,7 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-            
+
             <Route 
               path="/professor/*" 
               element={
@@ -73,7 +86,7 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-            
+
             <Route 
               path="/student/*" 
               element={
@@ -82,7 +95,7 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-            
+
             {/* Catch all route */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

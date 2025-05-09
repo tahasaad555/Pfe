@@ -46,10 +46,10 @@ const AdminDemands = () => {
       // First try admin endpoint, fall back to regular endpoint if needed
       let response;
       try {
-        response = await API.adminAPI.getPendingDemands();
+        response = await API.get('/api/admin/dashboard/pending-demands');
       } catch (err) {
         console.log("Falling back to reservations/pending endpoint");
-        response = await API.reservationAPI.getPendingDemands();
+        response = await API.get('/api/reservations/pending');
       }
       
       if (!response || !response.data) {
@@ -86,35 +86,6 @@ const AdminDemands = () => {
         text: error.response?.data?.message || 'Failed to load pending demands', 
         type: 'error' 
       });
-      
-      // Fallback to mock data for development/testing
-      const mockDemands = [
-        {
-          id: 'PR1004',
-          classroom: 'Room 102',
-          reservedBy: 'Dr. Smith',
-          role: 'PROFESSOR',
-          date: '2025-04-15',
-          time: '14:00 - 16:00',
-          purpose: 'Physics Lecture',
-          status: 'PENDING',
-          userEmail: 'professor@example.com'
-        },
-        {
-          id: 'SR2005',
-          classroom: 'Study Room 201',
-          reservedBy: 'John Student',
-          role: 'STUDENT',
-          date: '2025-04-16',
-          time: '10:00 - 12:00',
-          purpose: 'Group Study',
-          status: 'PENDING',
-          userEmail: 'student@example.com'
-        }
-      ];
-      
-      setPendingDemands(mockDemands);
-      console.log("Using mock data due to API failure");
     } finally {
       setIsLoading(false);
     }
@@ -172,10 +143,10 @@ const AdminDemands = () => {
       // Try admin endpoint first, then fall back to regular endpoint
       let response;
       try {
-        response = await API.adminAPI.approveReservation(id);
+        response = await API.put(`/api/admin/approve-reservation/${id}`);
       } catch (err) {
         console.log("Falling back to reservations approve endpoint");
-        response = await API.reservationAPI.approveReservation(id);
+        response = await API.put(`/api/reservations/${id}/approve`);
       }
       
       if (!response || !response.data) {
@@ -257,10 +228,10 @@ const AdminDemands = () => {
       // Try admin endpoint first, then fall back to regular endpoint
       let response;
       try {
-        response = await API.adminAPI.rejectReservation(selectedDemand.id, rejectReason);
+        response = await API.put(`/api/admin/reject-reservation/${selectedDemand.id}`, { reason: rejectReason });
       } catch (err) {
         console.log("Falling back to reservations reject endpoint");
-        response = await API.reservationAPI.rejectReservation(selectedDemand.id, rejectReason);
+        response = await API.put(`/api/reservations/${selectedDemand.id}/reject`, { reason: rejectReason });
       }
       
       if (!response || !response.data) {

@@ -25,6 +25,8 @@ const ProfessorReservationRequest = () => {
     endTime: '',
     purpose: ''
   });
+
+  
   
   // Load all classrooms on component mount
   useEffect(() => {
@@ -43,6 +45,23 @@ const ProfessorReservationRequest = () => {
     
     loadClassrooms();
   }, []);
+
+  // Add the validation functions here
+// Add this function to validate time selection
+const validateTimes = (start, end) => {
+  if (!start || !end) return true; // Skip validation if values are empty
+  
+  const startMinutes = convertTimeToMinutes(start);
+  const endMinutes = convertTimeToMinutes(end);
+  
+  return endMinutes > startMinutes;
+};
+
+// Add this helper function to convert time to minutes
+const convertTimeToMinutes = (time) => {
+  const [hours, minutes] = time.split(':');
+  return parseInt(hours) * 60 + parseInt(minutes);
+};
   
   // Handle search criteria change
   const handleSearchChange = (e) => {
@@ -64,6 +83,13 @@ const ProfessorReservationRequest = () => {
       // Validate search criteria
       if (!searchCriteria.date || !searchCriteria.startTime || !searchCriteria.endTime) {
         setError("Please select date and time");
+        setLoading(false);
+        return;
+      }
+      
+      // Validate that end time is after start time
+      if (!validateTimes(searchCriteria.startTime, searchCriteria.endTime)) {
+        setError("End time must be after start time");
         setLoading(false);
         return;
       }
@@ -123,7 +149,7 @@ const ProfessorReservationRequest = () => {
       }
       
       // Send reservation request
-      await professorAPI.requestReservation(reservationDetails);
+      const response = await professorAPI.requestReservation(reservationDetails);
       
       // Close modal and show success message
       setShowConfirmModal(false);
@@ -131,6 +157,28 @@ const ProfessorReservationRequest = () => {
       
       // Clear search results
       setSearchResults([]);
+      
+      // Store the new reservation in localStorage
+      const storedReservations = localStorage.getItem('professorReservations') || '[]';
+      const parsedReservations = JSON.parse(storedReservations);
+      
+      // Format the new reservation
+      const newReservation = {
+        id: response.data?.id || `temp-${Date.now()}`,
+        classroom: selectedClassroom.roomNumber,
+        date: reservationDetails.date,
+        startTime: reservationDetails.startTime,
+        endTime: reservationDetails.endTime,
+        time: `${reservationDetails.startTime} - ${reservationDetails.endTime}`,
+        purpose: reservationDetails.purpose,
+        status: 'PENDING'
+      };
+      
+      // Add the new reservation to the array
+      parsedReservations.push(newReservation);
+      
+      // Update localStorage
+      localStorage.setItem('professorReservations', JSON.stringify(parsedReservations));
       
       setLoading(false);
     } catch (err) {
@@ -209,26 +257,25 @@ const ProfessorReservationRequest = () => {
             <div className="form-group">
               <label htmlFor="endTime">End Time</label>
               <select
-                id="endTime"
-                name="endTime"
-                className="form-control"
-                value={searchCriteria.endTime}
-                onChange={handleSearchChange}
-                required
-              >
-                <option value="">Select End Time</option>
-                <option value="09:30">09:30 AM</option>
-                <option value="10:30">10:30 AM</option>
-                <option value="11:30">11:30 AM</option>
-                <option value="12:30">12:30 PM</option>
-                <option value="13:30">01:30 PM</option>
-                <option value="14:30">02:30 PM</option>
-                <option value="15:30">03:30 PM</option>
-                <option value="16:30">04:30 PM</option>
-                <option value="17:30">05:30 PM</option>
-                <option value="18:30">06:30 PM</option>
-                <option value="19:30">07:30 PM</option>
-              </select>
+  id="startTime"
+  name="startTime"
+  className="form-control"
+  value={searchCriteria.startTime}
+  onChange={handleSearchChange}
+  required
+>
+  <option value="">Select Start Time</option>
+  <option value="08:00">08:00</option>
+  <option value="09:00">09:00</option>
+  <option value="10:00">10:00</option>
+  <option value="11:00">11:00</option>
+  <option value="12:00">12:00</option>
+  <option value="13:00">13:00</option>
+  <option value="14:00">14:00</option>
+  <option value="15:00">15:00</option>
+  <option value="16:00">16:00</option>
+  <option value="17:00">17:00</option>
+</select>
             </div>
           </div>
           
@@ -236,18 +283,25 @@ const ProfessorReservationRequest = () => {
             <div className="form-group">
               <label htmlFor="type">Room Type</label>
               <select
-                id="type"
-                name="type"
-                className="form-control"
-                value={searchCriteria.type}
-                onChange={handleSearchChange}
-              >
-                <option value="">Any Type</option>
-                <option value="Lecture Hall">Lecture Hall</option>
-                <option value="Classroom">Classroom</option>
-                <option value="Computer Lab">Computer Lab</option>
-                <option value="Seminar Room">Seminar Room</option>
-              </select>
+  id="endTime"
+  name="endTime"
+  className="form-control"
+  value={searchCriteria.endTime}
+  onChange={handleSearchChange}
+  required
+>
+  <option value="">Select End Time</option>
+  <option value="09:00">09:00</option>
+  <option value="10:00">10:00</option>
+  <option value="11:00">11:00</option>
+  <option value="12:00">12:00</option>
+  <option value="13:00">13:00</option>
+  <option value="14:00">14:00</option>
+  <option value="15:00">15:00</option>
+  <option value="16:00">16:00</option>
+  <option value="17:00">17:00</option>
+  <option value="18:00">18:00</option>
+</select>
             </div>
             
             <div className="form-group">

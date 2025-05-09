@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import ClassroomReservation from './ClassroomReservation';
 import ClassSchedule from './ClassSchedule';
+import ProfessorTimetable from './ProfessorTimetable';
 import MyReservations from './MyReservations';
+import NotificationService from '../../services/NotificationService';
+import NotificationPanel from '../common/NotificationPanel';
 import '../../styles/dashboard.css';
+import '../../styles/notifications.css';
 import Profile from '../common/Profile';
 
 // Component imports
@@ -15,9 +19,14 @@ import Modal from '../common/Modal';
 const ProfessorDashboard = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showModal, setShowModal] = useState(false);
   const [selectedClassroom, setSelectedClassroom] = useState(null);
   const [reservations, setReservations] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [pageTitle, setPageTitle] = useState('Dashboard');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Mock data - in a real app, these would come from an API or database
   const [myReservations, setMyReservations] = useState([
@@ -95,6 +104,45 @@ const ProfessorDashboard = () => {
     }
   ]);
 
+  // Check if user is authenticated
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/');
+    } else if (currentUser.role !== 'professor') {
+      logout();
+      navigate('/');
+      alert('You do not have permission to access the professor dashboard.');
+    }
+  }, [currentUser, navigate, logout]);
+  
+  // Update page title based on current route
+  useEffect(() => {
+    const path = location.pathname.split('/').pop();
+    
+    switch (path) {
+      case 'dashboard':
+        setPageTitle('Dashboard');
+        break;
+      case 'reservations':
+        setPageTitle('Reservations');
+        break;
+      case 'schedule':
+        setPageTitle('Class Schedule');
+        break;
+      case 'timetable':
+        setPageTitle('Timetable');
+        break;
+      case 'reserve':
+        setPageTitle('Reserve Classroom');
+        break;
+      case 'profile':
+        setPageTitle('Profile');
+        break;
+      default:
+        setPageTitle('Dashboard');
+    }
+  }, [location]);
+
   // Initialize state with localStorage on component mount
   useEffect(() => {
     const storedReservations = localStorage.getItem('professorReservations');
@@ -104,7 +152,50 @@ const ProfessorDashboard = () => {
       // Save initial reservations if none in localStorage
       localStorage.setItem('professorReservations', JSON.stringify(myReservations));
     }
+
+    // Fetch notification count
+    fetchNotificationCount();
+
+    // Set up interval to refresh notification count periodically
+    const interval = setInterval(fetchNotificationCount, 60000); // every minute
+    
+    return () => clearInterval(interval);
   }, []);
+
+  // Fetch notification count
+  const fetchNotificationCount = async () => {
+    try {
+      const count = await NotificationService.getUnreadCount();
+      setNotificationCount(count);
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+    }
+  };
+
+  // Toggle notifications panel
+  const toggleNotifications = () => {
+    setShowNotifications(!showNotifications);
+    
+    // If opening notifications, mark them as read
+    if (!showNotifications) {
+      markNotificationsAsRead();
+    }
+  };
+  
+  // Toggle sidebar menu
+  const toggleMenu = () => {
+    setMenuOpen(!menuOpen);
+  };
+  
+  // Mark notifications as read
+  const markNotificationsAsRead = async () => {
+    try {
+      await NotificationService.markAllAsRead();
+      setNotificationCount(0);
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
 
   // Save reservations to localStorage when they change
   useEffect(() => {
@@ -259,9 +350,14 @@ const ProfessorDashboard = () => {
       <div className="section">
         <div className="section-header">
           <h2>Today's Schedule</h2>
-          <Link to="/professor/schedule" className="view-all-link">
-            View Full Schedule <i className="fas fa-chevron-right"></i>
-          </Link>
+          <div className="section-actions">
+            <Link to="/professor/schedule" className="view-all-link">
+              View Schedule <i className="fas fa-chevron-right"></i>
+            </Link>
+            <Link to="/professor/timetable" className="view-all-link">
+              View Timetable <i className="fas fa-chevron-right"></i>
+            </Link>
+          </div>
         </div>
         
         <div className="today-classes">
@@ -312,6 +408,7 @@ const ProfessorDashboard = () => {
     { to: '/professor/reserve', icon: 'fas fa-calendar-plus', text: 'Reserve Classroom' },
     { to: '/professor/reservations', icon: 'fas fa-calendar-check', text: 'My Reservations' },
     { to: '/professor/schedule', icon: 'fas fa-calendar-alt', text: 'Class Schedule' },
+    { to: '/professor/timetable', icon: 'fas fa-calendar-week', text: 'Timetable' },
     { to: '/professor/profile', icon: 'fas fa-user', text: 'Profile' }
   ];
 
@@ -324,22 +421,45 @@ const ProfessorDashboard = () => {
         onLogout={handleLogout}
         currentUser={currentUser}
         userRole="Professor"
+        notificationCount={notificationCount}
       />
       
       <div className="content-wrapper">
         <div className="header">
-          <h1>Professor Dashboard</h1>
-          <div className="user-info">
-            <span className="role-badge">Professor</span>
-            <span>{currentUser?.firstName} {currentUser?.lastName}</span>
+          <h1>{pageTitle}</h1>
+          <div className="header-actions">
+            <div className="notification-bell-wrapper">
+              <button 
+                className="btn-notification" 
+                onClick={toggleNotifications}
+                title="View notifications"
+              >
+                <i className="fas fa-bell"></i>
+                {notificationCount > 0 && (
+                  <span className="header-notification-count">{notificationCount}</span>
+                )}
+              </button>
+            </div>
+            <div className="user-info">
+              <span className="role-badge">Professor</span>
+              <span>{currentUser?.firstName} {currentUser?.lastName}</span>
+            </div>
           </div>
         </div>
+        
+        {/* Notifications Panel */}
+        {showNotifications && (
+          <div className="notifications-container">
+            <NotificationPanel userRole="professor" />
+          </div>
+        )}
         
         <Routes>
           <Route path="/" element={<DashboardHome />} />
           <Route path="/reserve" element={<ClassroomReservation onSubmit={handleReservationSearch} fullPage={true} />} />
-          <Route path="/reservations" element={<MyReservations />} />
+          <Route path="/reservations" element={<MyReservations notificationCount={notificationCount} />} />
           <Route path="/schedule" element={<ClassSchedule classes={todayClasses} />} />
+          <Route path="/timetable" element={<ProfessorTimetable />} />
           <Route path="/profile" element={<Profile />} /> 
           {/* Add more routes as needed */}
         </Routes>

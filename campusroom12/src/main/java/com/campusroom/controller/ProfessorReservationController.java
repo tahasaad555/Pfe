@@ -5,6 +5,7 @@ import com.campusroom.dto.ReservationDTO;
 import com.campusroom.dto.ReservationRequestDTO;
 import com.campusroom.service.ProfessorReservationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -22,56 +23,142 @@ public class ProfessorReservationController {
     
     // Get all reservations for the current professor
     @GetMapping("")
-    public ResponseEntity<List<ReservationDTO>> getProfessorReservations() {
+    public ResponseEntity<?> getProfessorReservations() {
         System.out.println("GET /api/professor/reservations");
-        return ResponseEntity.ok(professorReservationService.getProfessorReservations());
+        try {
+            List<ReservationDTO> reservations = professorReservationService.getProfessorReservations();
+            return ResponseEntity.ok(reservations);
+        } catch (Exception e) {
+            System.err.println("Error retrieving professor reservations: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "message", e.getMessage()
+                    ));
+        }
     }
     
-    // Alternative endpoint that does the same as above (can be removed)
+    // Alternative endpoint that does the same as above
     @GetMapping("/my-reservations")
-    public ResponseEntity<List<ReservationDTO>> getMyReservations() {
+    public ResponseEntity<?> getMyReservations() {
         System.out.println("GET /api/professor/reservations/my-reservations");
-        return ResponseEntity.ok(professorReservationService.getProfessorReservations());
+        return getProfessorReservations();
     }
     
-    // Search with DTO parameter (recommended approach)
+    // Search for available classrooms
     @PostMapping("/search")
-    public ResponseEntity<List<ClassroomDTO>> searchAvailableClassrooms(@RequestBody ReservationRequestDTO request) {
+    public ResponseEntity<?> searchAvailableClassrooms(@RequestBody ReservationRequestDTO request) {
         System.out.println("POST /api/professor/reservations/search");
-        System.out.println("Critères de recherche: " + request);
+        System.out.println("Search criteria: " + request);
         
-        List<ClassroomDTO> availableClassrooms = professorReservationService.findAvailableClassrooms(
-            request.getDate(), 
-            request.getStartTime(), 
-            request.getEndTime(), 
-            request.getClassType(), 
-            request.getCapacity()
-        );
-        
-        System.out.println("Salles disponibles trouvées: " + availableClassrooms.size());
-        return ResponseEntity.ok(availableClassrooms);
+        try {
+            // Validate request parameters
+            if (request.getDate() == null || request.getStartTime() == null || 
+                request.getEndTime() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "success", false,
+                                "message", "Missing required fields: date, startTime, endTime"
+                        ));
+            }
+            
+            // Convert capacity to int (handle the case where it might be a string in the request)
+            int capacity = request.getCapacity();
+            
+            List<ClassroomDTO> availableClassrooms = professorReservationService.findAvailableClassrooms(
+                request.getDate(), 
+                request.getStartTime(), 
+                request.getEndTime(), 
+                request.getClassType(), 
+                capacity
+            );
+            
+            System.out.println("Available classrooms found: " + availableClassrooms.size());
+            return ResponseEntity.ok(availableClassrooms);
+        } catch (Exception e) {
+            System.err.println("Error searching classrooms: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
+                            "success", false,
+                            "message", e.getMessage()
+                    ));
+        }
     }
     
-    // Make a reservation request
+    // Make a reservation request - the key endpoint we need to fix
     @PostMapping("/request")
-    public ResponseEntity<ReservationDTO> requestReservation(@RequestBody ReservationRequestDTO request) {
+    public ResponseEntity<?> requestReservation(@RequestBody ReservationRequestDTO request) {
         System.out.println("POST /api/professor/reservations/request");
-        System.out.println("Demande de réservation: " + request);
+        System.out.println("Reservation request: " + request);
         
-        ReservationDTO reservation = professorReservationService.createReservationRequest(request);
-        System.out.println("Demande de réservation créée: " + reservation);
-        
-        return ResponseEntity.ok(reservation);
+        try {
+            // Validate request - basic validation
+            if (request.getClassroomId() == null || request.getDate() == null || 
+                request.getStartTime() == null || request.getEndTime() == null ||
+                request.getPurpose() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "success", false,
+                                "message", "Missing required fields: classroomId, date, startTime, endTime, purpose"
+                        ));
+            }
+            
+            // Create the reservation request - it will have PENDING status (set in the service)
+            ReservationDTO reservation = professorReservationService.createReservationRequest(request);
+            System.out.println("Reservation request created with status: " + reservation.getStatus());
+            
+            // Return success response with reservation details
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Reservation request submitted successfully. It is pending administrator approval.",
+                    "reservation", reservation
+            ));
+        } catch (Exception e) {
+            System.err.println("Error creating reservation request: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
+                            "success", false,
+                            "message", e.getMessage()
+                    ));
+        }
     }
     
-    // Cancel a reservation
-    @PutMapping("/{id}/cancel")
-    public ResponseEntity<ReservationDTO> cancelReservation(@PathVariable String id) {
-        System.out.println("PUT /api/professor/reservations/" + id + "/cancel");
+    // Edit an existing reservation - NEW ENDPOINT
+    @PutMapping("/{id}")
+    public ResponseEntity<?> editReservation(@PathVariable String id, @RequestBody ReservationRequestDTO request) {
+        System.out.println("PUT /api/professor/reservations/" + id);
+        System.out.println("Edit reservation request: " + request);
         
-        ReservationDTO canceledReservation = professorReservationService.cancelReservation(id);
-        System.out.println("Réservation annulée: " + canceledReservation);
-        
-        return ResponseEntity.ok(canceledReservation);
+        try {
+            // Validate request
+            if (request.getClassroomId() == null || request.getDate() == null || 
+                request.getStartTime() == null || request.getEndTime() == null ||
+                request.getPurpose() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "success", false,
+                                "message", "Missing required fields: classroomId, date, startTime, endTime, purpose"
+                        ));
+            }
+            
+            // Update the reservation
+            ReservationDTO updatedReservation = professorReservationService.editReservationRequest(id, request);
+            System.out.println("Reservation updated with status: " + updatedReservation.getStatus());
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Reservation updated successfully. It is pending administrator approval.",
+                    "reservation", updatedReservation
+            ));
+        } catch (Exception e) {
+            System.err.println("Error updating reservation: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
+                            "success", false,
+                            "message", e.getMessage()
+                    ));
+        }
     }
 }

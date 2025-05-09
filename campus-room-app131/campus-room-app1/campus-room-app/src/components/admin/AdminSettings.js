@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import API from '../../api'; // Import the default API instance
+import SettingsService from '../../services/SettingsService';
 import '../../styles/dashboard.css';
 
 const AdminSettings = () => {
@@ -49,11 +49,9 @@ const AdminSettings = () => {
         setError(null);
         
         console.log('Fetching settings...');
-        const response = await API.get('/settings');
-        console.log('Settings response:', response.data);
-        
-        // Extract settings from response
-        const settings = response.data;
+        // Use our SettingsService instead of direct API call
+        const settings = await SettingsService.getSettings(true); // Force refresh
+        console.log('Settings loaded:', settings);
         
         // Update all three state groups
         setGeneralSettings({
@@ -138,9 +136,9 @@ const AdminSettings = () => {
       
       console.log('Saving settings:', combinedSettings);
       
-      // Send to the API
-      const response = await API.put('/settings', combinedSettings);
-      console.log('Save response:', response.data);
+      // Use our SettingsService instead of direct API call
+      const updatedSettings = await SettingsService.updateSettings(combinedSettings);
+      console.log('Settings saved successfully:', updatedSettings);
       
       // Show success message
       setSaveStatus('success');
@@ -319,8 +317,11 @@ const AdminSettings = () => {
                 name="reservationCreated"
                 checked={notificationSettings.reservationCreated}
                 onChange={handleNotificationChange}
+                disabled={!notificationSettings.emailNotifications}
               />
-              <label htmlFor="reservationCreated">Notify on reservation creation</label>
+              <label htmlFor="reservationCreated" className={!notificationSettings.emailNotifications ? 'disabled-label' : ''}>
+                Notify on reservation creation
+              </label>
             </div>
             
             <div className="checkbox-item">
@@ -330,8 +331,11 @@ const AdminSettings = () => {
                 name="reservationApproved"
                 checked={notificationSettings.reservationApproved}
                 onChange={handleNotificationChange}
+                disabled={!notificationSettings.emailNotifications}
               />
-              <label htmlFor="reservationApproved">Notify on reservation approval</label>
+              <label htmlFor="reservationApproved" className={!notificationSettings.emailNotifications ? 'disabled-label' : ''}>
+                Notify on reservation approval
+              </label>
             </div>
             
             <div className="checkbox-item">
@@ -341,8 +345,11 @@ const AdminSettings = () => {
                 name="reservationRejected"
                 checked={notificationSettings.reservationRejected}
                 onChange={handleNotificationChange}
+                disabled={!notificationSettings.emailNotifications}
               />
-              <label htmlFor="reservationRejected">Notify on reservation rejection</label>
+              <label htmlFor="reservationRejected" className={!notificationSettings.emailNotifications ? 'disabled-label' : ''}>
+                Notify on reservation rejection
+              </label>
             </div>
             
             <div className="checkbox-item">
@@ -352,150 +359,145 @@ const AdminSettings = () => {
                 name="newUserRegistered"
                 checked={notificationSettings.newUserRegistered}
                 onChange={handleNotificationChange}
-              />
-              <label htmlFor="newUserRegistered">Notify on new user registration</label>
+                disabled={!notificationSettings.emailNotifications}
+                />
+                <label htmlFor="systemUpdates" className={!notificationSettings.emailNotifications ? 'disabled-label' : ''}>
+                  Notify on system updates
+                </label>
+              </div>
+              
+              <div className="checkbox-item">
+                <input 
+                  type="checkbox" 
+                  id="dailyDigest" 
+                  name="dailyDigest"
+                  checked={notificationSettings.dailyDigest}
+                  onChange={handleNotificationChange}
+                  disabled={!notificationSettings.emailNotifications}
+                />
+                <label htmlFor="dailyDigest" className={!notificationSettings.emailNotifications ? 'disabled-label' : ''}>
+                  Send daily activity digest
+                </label>
+              </div>
+            </div>
+          </form>
+        </div>
+        
+        {/* Reservation Settings */}
+        <div className="section">
+          <h3 className="sub-section-title">Reservation Settings</h3>
+          <form className="settings-form">
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="maxDaysInAdvance">Max Days in Advance</label>
+                <input 
+                  type="number" 
+                  id="maxDaysInAdvance" 
+                  name="maxDaysInAdvance"
+                  min="1"
+                  max="365"
+                  value={reservationSettings.maxDaysInAdvance}
+                  onChange={handleReservationChange}
+                />
+                <small>Maximum days in advance for making reservations</small>
+              </div>
+              <div className="form-group">
+                <label htmlFor="minTimeBeforeReservation">Min Hours Before</label>
+                <input 
+                  type="number" 
+                  id="minTimeBeforeReservation" 
+                  name="minTimeBeforeReservation"
+                  min="0"
+                  max="72"
+                  value={reservationSettings.minTimeBeforeReservation}
+                  onChange={handleReservationChange}
+                />
+                <small>Minimum hours before reservation can be made</small>
+              </div>
             </div>
             
-            <div className="checkbox-item">
-              <input 
-                type="checkbox" 
-                id="systemUpdates" 
-                name="systemUpdates"
-                checked={notificationSettings.systemUpdates}
-                onChange={handleNotificationChange}
-              />
-              <label htmlFor="systemUpdates">Notify on system updates</label>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="maxHoursPerReservation">Max Hours Per Reservation</label>
+                <input 
+                  type="number" 
+                  id="maxHoursPerReservation" 
+                  name="maxHoursPerReservation"
+                  min="1"
+                  max="24"
+                  value={reservationSettings.maxHoursPerReservation}
+                  onChange={handleReservationChange}
+                />
+                <small>Maximum hours per single reservation</small>
+              </div>
+              <div className="form-group">
+                <label htmlFor="maxReservationsPerWeek">Max Reservations Per Week</label>
+                <input 
+                  type="number" 
+                  id="maxReservationsPerWeek" 
+                  name="maxReservationsPerWeek"
+                  min="1"
+                  max="21"
+                  value={reservationSettings.maxReservationsPerWeek}
+                  onChange={handleReservationChange}
+                />
+                <small>Maximum reservations per user per week</small>
+              </div>
             </div>
             
-            <div className="checkbox-item">
-              <input 
-                type="checkbox" 
-                id="dailyDigest" 
-                name="dailyDigest"
-                checked={notificationSettings.dailyDigest}
-                onChange={handleNotificationChange}
-              />
-              <label htmlFor="dailyDigest">Send daily activity digest</label>
+            <div className="form-group checkbox-group">
+              <div className="checkbox-item">
+                <input 
+                  type="checkbox" 
+                  id="studentRequireApproval" 
+                  name="studentRequireApproval"
+                  checked={reservationSettings.studentRequireApproval}
+                  onChange={handleReservationChange}
+                />
+                <label htmlFor="studentRequireApproval">Student reservations require approval</label>
+              </div>
+              <div className="checkbox-item">
+                <input 
+                  type="checkbox" 
+                  id="professorRequireApproval" 
+                  name="professorRequireApproval"
+                  checked={reservationSettings.professorRequireApproval}
+                  onChange={handleReservationChange}
+                />
+                <label htmlFor="professorRequireApproval">Professor reservations require approval</label>
+              </div>
+              <div className="checkbox-item">
+                <input 
+                  type="checkbox" 
+                  id="showAvailabilityCalendar" 
+                  name="showAvailabilityCalendar"
+                  checked={reservationSettings.showAvailabilityCalendar}
+                  onChange={handleReservationChange}
+                />
+                <label htmlFor="showAvailabilityCalendar">Show availability calendar to users</label>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
+        
+        <div className="form-actions">
+          <button 
+            className="btn-primary"
+            onClick={saveSettings}
+            disabled={saveStatus === 'saving'}
+          >
+            {saveStatus === 'saving' ? 'Saving...' : 'Save All Settings'}
+          </button>
+          <button 
+            className="btn-secondary"
+            onClick={() => window.location.reload()}
+            disabled={saveStatus === 'saving'}
+          >
+            Reset Changes
+          </button>
+        </div>
       </div>
-      
-      {/* Reservation Settings */}
-      <div className="section">
-        <h3 className="sub-section-title">Reservation Settings</h3>
-        <form className="settings-form">
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="maxDaysInAdvance">Max Days in Advance</label>
-              <input 
-                type="number" 
-                id="maxDaysInAdvance" 
-                name="maxDaysInAdvance"
-                min="1"
-                max="365"
-                value={reservationSettings.maxDaysInAdvance}
-                onChange={handleReservationChange}
-              />
-              <small>Maximum days in advance for making reservations</small>
-            </div>
-            <div className="form-group">
-              <label htmlFor="minTimeBeforeReservation">Min Hours Before</label>
-              <input 
-                type="number" 
-                id="minTimeBeforeReservation" 
-                name="minTimeBeforeReservation"
-                min="0"
-                max="72"
-                value={reservationSettings.minTimeBeforeReservation}
-                onChange={handleReservationChange}
-              />
-              <small>Minimum hours before reservation can be made</small>
-            </div>
-          </div>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="maxHoursPerReservation">Max Hours Per Reservation</label>
-              <input 
-                type="number" 
-                id="maxHoursPerReservation" 
-                name="maxHoursPerReservation"
-                min="1"
-                max="24"
-                value={reservationSettings.maxHoursPerReservation}
-                onChange={handleReservationChange}
-              />
-              <small>Maximum hours per single reservation</small>
-            </div>
-            <div className="form-group">
-              <label htmlFor="maxReservationsPerWeek">Max Reservations Per Week</label>
-              <input 
-                type="number" 
-                id="maxReservationsPerWeek" 
-                name="maxReservationsPerWeek"
-                min="1"
-                max="21"
-                value={reservationSettings.maxReservationsPerWeek}
-                onChange={handleReservationChange}
-              />
-              <small>Maximum reservations per user per week</small>
-            </div>
-          </div>
-          
-          <div className="form-group checkbox-group">
-            <div className="checkbox-item">
-              <input 
-                type="checkbox" 
-                id="studentRequireApproval" 
-                name="studentRequireApproval"
-                checked={reservationSettings.studentRequireApproval}
-                onChange={handleReservationChange}
-              />
-              <label htmlFor="studentRequireApproval">Student reservations require approval</label>
-            </div>
-            <div className="checkbox-item">
-              <input 
-                type="checkbox" 
-                id="professorRequireApproval" 
-                name="professorRequireApproval"
-                checked={reservationSettings.professorRequireApproval}
-                onChange={handleReservationChange}
-              />
-              <label htmlFor="professorRequireApproval">Professor reservations require approval</label>
-            </div>
-            <div className="checkbox-item">
-              <input 
-                type="checkbox" 
-                id="showAvailabilityCalendar" 
-                name="showAvailabilityCalendar"
-                checked={reservationSettings.showAvailabilityCalendar}
-                onChange={handleReservationChange}
-              />
-              <label htmlFor="showAvailabilityCalendar">Show availability calendar to users</label>
-            </div>
-          </div>
-        </form>
-      </div>
-      
-      <div className="form-actions">
-        <button 
-          className="btn-primary"
-          onClick={saveSettings}
-          disabled={saveStatus === 'saving'}
-        >
-          {saveStatus === 'saving' ? 'Saving...' : 'Save All Settings'}
-        </button>
-        <button 
-          className="btn-secondary"
-          onClick={() => window.location.reload()}
-          disabled={saveStatus === 'saving'}
-        >
-          Reset Changes
-        </button>
-      </div>
-    </div>
-  );
-};
-
-export default AdminSettings;
+    );
+  };
+  
+  export default AdminSettings;

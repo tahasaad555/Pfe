@@ -32,8 +32,14 @@ public class ReservationDTO {
         return new ReservationDTOBuilder();
     }
 
-    public Object getReservedBy() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    // Fixed implementation - return the actual field value instead of throwing exception
+    public String getReservedBy() {
+        return this.reservedBy;
+    }
+
+    // Fixed implementation - return the actual field value instead of throwing exception
+    public String getStatus() {
+        return this.status;
     }
     
     public static class ReservationDTOBuilder {

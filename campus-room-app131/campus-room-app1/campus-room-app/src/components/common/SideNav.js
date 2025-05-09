@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import '../../styles/dashboard.css';
+import '../../styles/notifications.css';
 
 const SideNav = ({ 
   title, 
@@ -8,7 +9,8 @@ const SideNav = ({
   navLinks, 
   onLogout, 
   currentUser, 
-  userRole 
+  userRole,
+  notificationCount = 0  // Add a prop for notification count
 }) => {
   return (
     <div className="sidebar-nav">
@@ -39,6 +41,11 @@ const SideNav = ({
               end={link.exact}
             >
               <i className={link.icon}></i> {link.text}
+              
+              {/* If this is the Demands link and we have notifications, show the counter */}
+              {link.text === 'Demands' && notificationCount > 0 && (
+                <span className="notification-badge">{notificationCount}</span>
+              )}
             </NavLink>
           </li>
         ))}

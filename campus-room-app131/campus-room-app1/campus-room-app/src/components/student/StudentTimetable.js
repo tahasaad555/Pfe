@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { API } from '../../api';
 import '../../styles/timetable.css';
 
 const StudentTimetable = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [viewMode, setViewMode] = useState('grid');
   const [currentWeek, setCurrentWeek] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [showCourseModal, setShowCourseModal] = useState(false);
+  const [timetableData, setTimetableData] = useState({});
+  const [classGroups, setClassGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Time slots
   const timeSlots = [
@@ -20,25 +27,233 @@ const StudentTimetable = () => {
   // Days of the week
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   
-  // Mock data for timetable
-  const timetableData = {
-    'Monday': [
-      { id: 'C1', name: 'CS 101: Intro to Programming', instructor: 'Professor Johnson', location: 'Room 101', startTime: '9:00', endTime: '10:30', color: '#6366f1', type: 'Lecture' },
-      { id: 'C2', name: 'MATH 201: Calculus II', instructor: 'Professor Wilson', location: 'Room 203', startTime: '13:00', endTime: '14:30', color: '#10b981', type: 'Lecture' }
-    ],
-    'Tuesday': [
-      { id: 'C3', name: 'PHYS 101: Physics I', instructor: 'Professor Smith', location: 'Lab 305', startTime: '11:00', endTime: '12:30', color: '#0ea5e9', type: 'Lab' }
-    ],
-    'Wednesday': [
-      { id: 'C4', name: 'CS 101: Intro to Programming', instructor: 'Professor Johnson', location: 'Room 101', startTime: '9:00', endTime: '10:30', color: '#6366f1', type: 'Lecture' },
-      { id: 'C5', name: 'Study Group', instructor: null, location: 'Library', startTime: '15:30', endTime: '16:30', color: '#f59e0b', type: 'Study Group', participants: 5 }
-    ],
-    'Thursday': [
-      { id: 'C6', name: 'PHYS 101: Physics I', instructor: 'Professor Smith', location: 'Lab 305', startTime: '11:00', endTime: '12:30', color: '#0ea5e9', type: 'Lab' }
-    ],
-    'Friday': [
-      { id: 'C7', name: 'MATH 201: Calculus II', instructor: 'Professor Wilson', location: 'Room 203', startTime: '13:00', endTime: '14:30', color: '#10b981', type: 'Lecture' }
-    ]
+  // Update the useEffect hook that fetches timetable data
+  useEffect(() => {
+    const fetchTimetable = async () => {
+      try {
+        // Add this at the start of fetchTimetable function
+        console.log('Auth token:', localStorage.getItem('token'));
+        console.log('Current user:', localStorage.getItem('user'));
+        setLoading(true);
+        setError(null);
+        
+        // First check if user is authenticated
+        if (!currentUser) {
+          throw new Error('User not authenticated');
+        }
+        
+        console.log('Fetching timetable data from API for user:', currentUser.email);
+        
+        // Make API call to get the timetable data
+        // Now using classGroup-based timetable
+        const response = await API.timetableAPI.getMyTimetable();
+        console.log('Timetable API response:', response);
+        
+        if (response && response.data) {
+          // Process the timetable entries
+          const processedData = processTimetableData(response.data);
+          setTimetableData(processedData);
+          console.log('Timetable data processed successfully');
+          
+          // Also fetch the user's class groups for display
+          fetchClassGroups();
+        } else {
+          throw new Error('No data received from timetable API');
+        }
+      } catch (err) {
+        console.error('Error fetching timetable:', err);
+        
+        // Provide specific error message to help debug the issue
+        if (err.response) {
+          // Server responded with an error status
+          if (err.response.status === 401) {
+            setError('Authentication error. Please log in again.');
+            // Redirect to login page or handle auth error
+            navigate('/');
+          } else {
+            setError(`Server error: ${err.response.status} - ${err.response.data?.message || 'Unknown error'}`);
+          }
+        } else if (err.request) {
+          // Request was made but no response received
+          setError('No response from server. Please check your connection.');
+        } else {
+          // Something else went wrong
+          setError(`Error: ${err.message}`);
+        }
+        
+        // Only use mock data in development environment
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Using mock data as fallback during development');
+          setTimetableData(getMockTimetableData());
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchTimetable();
+  }, [currentUser, navigate]);
+  
+  // Fetch the user's class groups
+  const fetchClassGroups = async () => {
+    try {
+      // Only proceed if user is authenticated and is a student
+      if (!currentUser || currentUser.role !== 'STUDENT') {
+        return;
+      }
+      
+      const response = await API.classGroupAPI.getClassGroupsByStudent(currentUser.id);
+      
+      if (response && response.data) {
+        setClassGroups(response.data);
+        console.log('Fetched class groups:', response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching class groups:', err);
+      // Don't set error - we still have the timetable data
+    }
+  };
+
+  // Process timetable data
+  const processTimetableData = (timetableEntries) => {
+    const processedData = {};
+    
+    // Initialize empty arrays for each day
+    daysOfWeek.forEach(day => {
+      processedData[day] = [];
+    });
+    
+    // Check if timetableEntries is an array
+    if (Array.isArray(timetableEntries)) {
+      console.log(`Processing ${timetableEntries.length} timetable entries`);
+      
+      // Process each entry
+      timetableEntries.forEach(entry => {
+        const day = entry.day;
+        
+        // Log entry for debugging
+        console.log('Processing entry:', entry);
+        
+        if (daysOfWeek.includes(day)) {
+          // Ensure both startTime and endTime have a consistent format (HH:MM)
+          const startTime = formatTimeString(entry.startTime);
+          const endTime = formatTimeString(entry.endTime);
+          
+          processedData[day].push({
+            id: entry.id,
+            name: entry.name || 'Unnamed Course',
+            instructor: entry.instructor || 'No instructor assigned',
+            location: entry.location || 'TBD',
+            startTime: startTime,
+            endTime: endTime,
+            color: entry.color || '#6366f1',
+            type: entry.type || 'Lecture'
+          });
+          console.log(`Added entry to ${day}:`, entry.name, `with time ${startTime} - ${endTime}`);
+        } else {
+          console.warn(`Skipping entry with invalid day: ${day}`, entry);
+        }
+      });
+    } else {
+      // Handle different response formats
+      if (timetableEntries && typeof timetableEntries === 'object') {
+        console.log('Timetable data is an object, trying to extract entries...');
+        
+        // Some APIs might return { data: [...entries] } or another nested structure
+        const extractedEntries = timetableEntries.timetableEntries || 
+                              timetableEntries.entries || 
+                              timetableEntries.data || 
+                              [];
+        
+        if (Array.isArray(extractedEntries)) {
+          console.log(`Processing ${extractedEntries.length} extracted timetable entries`);
+          
+          extractedEntries.forEach(entry => {
+            const day = entry.day;
+            
+            if (daysOfWeek.includes(day)) {
+              // Ensure consistent time format
+              const startTime = formatTimeString(entry.startTime);
+              const endTime = formatTimeString(entry.endTime);
+              
+              processedData[day].push({
+                id: entry.id,
+                name: entry.name || 'Unnamed Course',
+                instructor: entry.instructor || 'No instructor assigned',
+                location: entry.location || 'TBD',
+                startTime: startTime,
+                endTime: endTime,
+                color: entry.color || '#6366f1',
+                type: entry.type || 'Lecture'
+              });
+            }
+          });
+        } else {
+          console.error('Could not extract timetable entries from:', timetableEntries);
+        }
+      } else {
+        console.error('Timetable entries is not an array or object:', timetableEntries);
+      }
+    }
+    
+    // Log the final processed data structure
+    console.log('Final processed timetable data:', processedData);
+    
+    return processedData;
+  };
+
+  // Helper function to ensure consistent time format (HH:MM)
+  const formatTimeString = (timeString) => {
+    if (!timeString) return '00:00';
+    
+    // Handle different time formats that might come from the API
+    if (typeof timeString === 'string') {
+      // If in format HH:MM, return as is
+      if (/^\d{1,2}:\d{2}$/.test(timeString)) {
+        return timeString.padStart(5, '0'); // Ensure HH:MM (e.g., "9:00" -> "09:00")
+      }
+      
+      // If in format HH:MM:SS, remove seconds
+      if (/^\d{1,2}:\d{2}:\d{2}$/.test(timeString)) {
+        return timeString.split(':').slice(0, 2).join(':').padStart(5, '0');
+      }
+      
+      // Try to parse time from string (in case of ISO format or other)
+      try {
+        const date = new Date(timeString);
+        if (!isNaN(date)) {
+          return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+      } catch (e) {
+        console.warn('Could not parse time from string:', timeString);
+      }
+    }
+    
+    // If all else fails, try to convert to string and take first 5 chars
+    return String(timeString).padStart(5, '0');
+  };
+  
+  // Fallback mock data in case the API fails
+  const getMockTimetableData = () => {
+    return {
+      'Monday': [
+        { id: 'C1', name: 'CS 101: Intro to Programming', instructor: 'Professor Johnson', location: 'Room 101', startTime: '9:00', endTime: '10:30', color: '#6366f1', type: 'Lecture' },
+        { id: 'C2', name: 'MATH 201: Calculus II', instructor: 'Professor Wilson', location: 'Room 203', startTime: '13:00', endTime: '14:30', color: '#10b981', type: 'Lecture' }
+      ],
+      'Tuesday': [
+        { id: 'C3', name: 'PHYS 101: Physics I', instructor: 'Professor Smith', location: 'Lab 305', startTime: '11:00', endTime: '12:30', color: '#0ea5e9', type: 'Lab' }
+      ],
+      'Wednesday': [
+        { id: 'C4', name: 'CS 101: Intro to Programming', instructor: 'Professor Johnson', location: 'Room 101', startTime: '9:00', endTime: '10:30', color: '#6366f1', type: 'Lecture' },
+        { id:'C5', name: 'Study Group', instructor: null, location: 'Library', startTime: '15:30', endTime: '16:30', color: '#f59e0b', type: 'Study Group', participants: 5 }
+      ],
+      'Thursday': [
+        { id: 'C6', name: 'PHYS 101: Physics I', instructor: 'Professor Smith', location: 'Lab 305', startTime: '11:00', endTime: '12:30', color: '#0ea5e9', type: 'Lab' }
+      ],
+      'Friday': [
+        { id: 'C7', name: 'MATH 201: Calculus II', instructor: 'Professor Wilson', location: 'Room 203', startTime: '13:00', endTime: '14:30', color: '#10b981', type: 'Lecture' }
+      ]
+    };
   };
   
   // Current day
@@ -54,12 +269,14 @@ const StudentTimetable = () => {
     
     const results = [];
     daysOfWeek.forEach(day => {
-      timetableData[day].forEach(course => {
-        if (course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (course.instructor && course.instructor.toLowerCase().includes(searchTerm.toLowerCase()))) {
-          results.push({...course, day});
-        }
-      });
+      if (timetableData[day]) {
+        timetableData[day].forEach(course => {
+          if (course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (course.instructor && course.instructor.toLowerCase().includes(searchTerm.toLowerCase()))) {
+            results.push({...course, day});
+          }
+        });
+      }
     });
     
     return results;
@@ -133,70 +350,122 @@ const StudentTimetable = () => {
   const weekDates = getWeekDates();
   
   // Function to export schedule as iCal (.ics) file
-  const exportSchedule = () => {
-    let icsContent = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//CampusRoom//Timetable//EN'
-    ];
-    
-    // Add each class as an event
-    daysOfWeek.forEach((day, dayIndex) => {
-      if (timetableData[day]) {
-        timetableData[day].forEach(course => {
-          const eventDate = new Date(weekDates[dayIndex]);
-          const startTime = course.startTime.split(':');
-          const endTime = course.endTime.split(':');
-          
-          const startDateTime = new Date(eventDate);
-          startDateTime.setHours(parseInt(startTime[0]), parseInt(startTime[1] || 0), 0);
-          
-          const endDateTime = new Date(eventDate);
-          endDateTime.setHours(parseInt(endTime[0]), parseInt(endTime[1] || 0), 0);
-          
-          // Format dates for iCal (YYYYMMDDTHHmmss)
-          const formatDateForICS = (d) => {
-            return d.getFullYear() + 
-                   ('0' + (d.getMonth() + 1)).slice(-2) + 
-                   ('0' + d.getDate()).slice(-2) + 'T' + 
-                   ('0' + d.getHours()).slice(-2) + 
-                   ('0' + d.getMinutes()).slice(-2) + 
-                   ('0' + d.getSeconds()).slice(-2);
-          };
-          
-          icsContent = [
-            ...icsContent,
-            'BEGIN:VEVENT',
-            `UID:${course.id}@campusroom.edu`,
-            `DTSTAMP:${formatDateForICS(new Date())}`,
-            `DTSTART:${formatDateForICS(startDateTime)}`,
-            `DTEND:${formatDateForICS(endDateTime)}`,
-            `SUMMARY:${course.name}`,
-            `LOCATION:${course.location}`,
-            `DESCRIPTION:${course.type} with ${course.instructor || 'n/a'}`,
-            'END:VEVENT'
-          ];
-        });
-      }
-    });
-    
-    icsContent.push('END:VCALENDAR');
-    
-    // Create download
-    const blob = new Blob([icsContent.join('\n')], { type: 'text/calendar' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = 'class_schedule.ics';
-    link.href = url;
-    link.click();
+  const exportSchedule = async () => {
+    try {
+      // Use API to get ICS file
+      const response = await API.timetableAPI.exportTimetable('ics');
+      
+      // Create blob from response data
+      const blob = new Blob([response.data], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.download = 'class_schedule.ics';
+      link.href = url;
+      link.click();
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting schedule:', error);
+      alert('Failed to export schedule. Please try again later.');
+      
+      // Fallback to client-side generation if API fails
+      let icsContent = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//CampusRoom//Timetable//EN'
+      ];
+      
+      // Add each class as an event
+      daysOfWeek.forEach((day, dayIndex) => {
+        if (timetableData[day]) {
+          timetableData[day].forEach(course => {
+            const eventDate = new Date(weekDates[dayIndex]);
+            const startTime = course.startTime.split(':');
+            const endTime = course.endTime.split(':');
+            
+            const startDateTime = new Date(eventDate);
+            startDateTime.setHours(parseInt(startTime[0]), parseInt(startTime[1] || 0), 0);
+            
+            const endDateTime = new Date(eventDate);
+            endDateTime.setHours(parseInt(endTime[0]), parseInt(endTime[1] || 0), 0);
+            
+            // Format dates for iCal (YYYYMMDDTHHmmss)
+            const formatDateForICS = (d) => {
+              return d.getFullYear() + 
+                    ('0' + (d.getMonth() + 1)).slice(-2) + 
+                    ('0' + d.getDate()).slice(-2) + 'T' + 
+                    ('0' + d.getHours()).slice(-2) + 
+                    ('0' + d.getMinutes()).slice(-2) + 
+                    ('0' + d.getSeconds()).slice(-2);
+            };
+            
+            icsContent = [
+              ...icsContent,
+              'BEGIN:VEVENT',
+              `UID:${course.id}@campusroom.edu`,
+              `DTSTAMP:${formatDateForICS(new Date())}`,
+              `DTSTART:${formatDateForICS(startDateTime)}`,
+              `DTEND:${formatDateForICS(endDateTime)}`,
+              `SUMMARY:${course.name}`,
+              `LOCATION:${course.location}`,
+              `DESCRIPTION:${course.type} with ${course.instructor || 'n/a'}`,
+              'END:VEVENT'
+            ];
+          });
+        }
+      });
+      
+      icsContent.push('END:VCALENDAR');
+      
+      // Create download
+      const blob = new Blob([icsContent.join('\n')], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = 'class_schedule.ics';
+      link.href = url;
+      link.click();
+    }
   };
+  
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="timetable-page">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading your timetable...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error state
+  if (error) {
+    return (
+      <div className="timetable-page">
+        <div className="error-container">
+          <h3>Error</h3>
+          <p>{error}</p>
+          <button 
+            className="btn btn-primary"
+            onClick={() => window.location.reload()}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="timetable-page">
       <div className="timetable-header">
         <div className="timetable-title">
           <h1>Class Timetable</h1>
-          <p>Manage your weekly academic schedule</p>
+          <p>Your weekly academic schedule</p>
         </div>
         
         <div className="timetable-actions">
@@ -220,6 +489,40 @@ const StudentTimetable = () => {
           </button>
         </div>
       </div>
+      
+      {/* Class Groups Section */}
+      {classGroups.length > 0 && (
+        <div className="enrolled-classes-section">
+          <h2>Your Enrolled Classes</h2>
+          <div className="class-groups-grid">
+            {classGroups.map(classGroup => (
+              <div key={classGroup.id} className="class-group-card">
+                <div className="class-group-header">
+                  <h3>{classGroup.courseCode}</h3>
+                  <span className="semester-badge">{classGroup.semester} {classGroup.academicYear}</span>
+                </div>
+                <h4>{classGroup.name}</h4>
+                {classGroup.professorName && (
+                  <p className="professor-name">
+                    <i className="fas fa-user-tie"></i> Prof. {classGroup.professorName}
+                  </p>
+                )}
+                {classGroup.description && (
+                  <p className="class-description">{classGroup.description}</p>
+                )}
+                <div className="class-meta">
+                  <span className="student-count">
+                    <i className="fas fa-users"></i> {classGroup.studentCount || 0} students
+                  </span>
+                  <span className="updated-at">
+                    <i className="fas fa-clock"></i> Updated: {classGroup.lastUpdated || 'N/A'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="timetable-controls">
         <div className="week-navigation">
@@ -318,25 +621,35 @@ const StudentTimetable = () => {
                 </div>
                 <div className="timetable-grid-slots">
                   {timeSlots.map((slot) => {
-                    const hourStart = parseInt(slot.split(':')[0]);
-                    const courses = timetableData[day]?.filter(course => {
-                      const courseStart = parseInt(course.startTime.split(':')[0]);
-                      const courseEnd = parseInt(course.endTime.split(':')[0]);
-                      return courseStart <= hourStart && courseEnd > hourStart;
+                    const slotStartHour = parseInt(slot.split(':')[0]);
+                    
+                    // Get courses that occur during this time slot
+                    const coursesInSlot = timetableData[day]?.filter(course => {
+                      const courseStartHour = parseInt(course.startTime.split(':')[0]);
+                      const courseStartMin = parseInt(course.startTime.split(':')[1] || 0);
+                      const courseEndHour = parseInt(course.endTime.split(':')[0]);
+                      const courseEndMin = parseInt(course.endTime.split(':')[1] || 0);
+                      
+                      // A course is in this slot if:
+                      // 1. It starts during this hour, OR
+                      // 2. It started before and ends after this hour
+                      return (courseStartHour === slotStartHour) || 
+                             (courseStartHour < slotStartHour && courseEndHour > slotStartHour);
                     });
                     
                     return (
                       <div key={`${day}-${slot}`} className="timetable-grid-slot">
-                        {courses.map((course) => {
+                        {coursesInSlot && coursesInSlot.map((course) => {
                           const startHour = parseInt(course.startTime.split(':')[0]);
                           const startMin = parseInt(course.startTime.split(':')[1] || 0);
-                          const endHour = parseInt(course.endTime.split(':')[0]);
-                          const endMin = parseInt(course.endTime.split(':')[1] || 0);
                           
-                          // Only render if this is the first slot for this course
-                          if (startHour === hourStart) {
+                          // Only render if this is the starting slot for this course
+                          if (startHour === slotStartHour) {
+                            const endHour = parseInt(course.endTime.split(':')[0]);
+                            const endMin = parseInt(course.endTime.split(':')[1] || 0);
+                            
+                            // Calculate duration in hours (including partial hours)
                             const durationHours = (endHour + endMin/60) - (startHour + startMin/60);
-                            const heightSpan = durationHours;
                             
                             return (
                               <div 
@@ -344,7 +657,8 @@ const StudentTimetable = () => {
                                 className="timetable-course"
                                 style={{ 
                                   backgroundColor: course.color,
-                                  height: `${heightSpan * 100}%`,
+                                  height: `${durationHours * 100}%`,
+                                  top: `${(startMin/60) * 100}%`,
                                   opacity: 0.9
                                 }}
                                 onClick={() => viewCourse(course, day)}
@@ -503,17 +817,6 @@ const StudentTimetable = () => {
                     </div>
                     <div className="detail-value">
                       {selectedCourse.instructor}
-                    </div>
-                  </div>
-                )}
-                
-                {selectedCourse.participants && (
-                  <div className="course-detail">
-                    <div className="detail-label">
-                      <i className="fas fa-users"></i> Participants
-                    </div>
-                    <div className="detail-value">
-                      {selectedCourse.participants}
                     </div>
                   </div>
                 )}

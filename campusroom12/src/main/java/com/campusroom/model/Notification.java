@@ -26,6 +26,7 @@ public class Notification {
     @JoinColumn(name = "user_id")
     private User user;
     
+    @Column(name = "is_read") // Changed column name to avoid SQL keyword conflict
     private boolean read;
     
     @Column(name = "icon_class")
@@ -44,7 +45,7 @@ public class Notification {
     }
 
     public Date getCreatedAt() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return createdAt; // Fixed to return actual value instead of throwing exception
     }
 
     public Long getId() {
@@ -102,5 +103,4 @@ public class Notification {
     public void setIconColor(String iconColor) {
         this.iconColor = iconColor;
     }
-    
 }

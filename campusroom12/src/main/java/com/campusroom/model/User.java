@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
+import java.util.List;
+import java.util.ArrayList;
 
 @NoArgsConstructor
 @AllArgsConstructor
@@ -42,7 +44,13 @@ public class User {
     private Role role;
 
     @Column(length = 20)
-    private String status; // ✅ Nouveau champ status
+    private String status;
+    
+    @Column(length = 100)
+    private String department;
+    
+    @Column(length = 20)
+    private String phone;
 
     @Column(nullable = true)
     private String resetToken;
@@ -59,8 +67,13 @@ public class User {
     private Date updatedAt;
 
     @Temporal(TemporalType.TIMESTAMP)
-    @Column(name = "last_login") // ✅ Nouveau champ lastLogin
+    @Column(name = "last_login")
     private Date lastLogin;
+    
+    // New fields for student timetable data
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "user_id")
+    private List<TimetableEntry> timetableEntries = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
@@ -73,12 +86,15 @@ public class User {
         updatedAt = new Date();
     }
 
+    public void setProfileImageUrl(String imageUrl) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
     public enum Role {
         ADMIN, PROFESSOR, STUDENT
     }
 
-    // ✅ Getters
-
+    // Getters
     public Long getId() {
         return id;
     }
@@ -126,9 +142,20 @@ public class User {
     public Date getLastLogin() {
         return lastLogin;
     }
+    
+    public List<TimetableEntry> getTimetableEntries() {
+        return timetableEntries;
+    }
+    
+    public String getDepartment() {
+        return department;
+    }
+    
+    public String getPhone() {
+        return phone;
+    }
 
-    // ✅ Setters
-
+    // Setters
     public void setId(Long id) {
         this.id = id;
     }
@@ -175,5 +202,27 @@ public class User {
 
     public void setLastLogin(Date lastLogin) {
         this.lastLogin = lastLogin;
+    }
+    
+    public void setTimetableEntries(List<TimetableEntry> timetableEntries) {
+        this.timetableEntries = timetableEntries;
+    }
+    
+    public void setDepartment(String department) {
+        this.department = department;
+    }
+    
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+    
+    // Helper method to add a timetable entry
+    public void addTimetableEntry(TimetableEntry entry) {
+        timetableEntries.add(entry);
+    }
+    
+    // Helper method to remove a timetable entry
+    public void removeTimetableEntry(TimetableEntry entry) {
+        timetableEntries.remove(entry);
     }
 }

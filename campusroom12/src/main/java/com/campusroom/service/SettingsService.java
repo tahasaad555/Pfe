@@ -13,37 +13,11 @@ public class SettingsService {
     @Autowired
     private SystemSettingsRepository settingsRepository;
     
+    @Autowired
+    private SystemSettingsProvider settingsProvider;
+    
     public SystemSettingsDTO getSystemSettings() {
-        SystemSettings settings = settingsRepository.findAll().stream()
-                .findFirst()
-                .orElseGet(() -> {
-                    // Créer des paramètres par défaut si aucun n'existe
-                    SystemSettings defaultSettings = new SystemSettings();
-                    defaultSettings.setSystemName("Campus Room");
-                    defaultSettings.setTagline("Smart Classroom Management System");
-                    defaultSettings.setContactEmail("admin@campusroom.edu");
-                    defaultSettings.setSupportPhone("(555) 123-4567");
-                    defaultSettings.setAutoApproveAdmin(true);
-                    defaultSettings.setAutoApproveProfessor(false);
-                    defaultSettings.setAutoApproveStudent(false);
-                    defaultSettings.setEmailNotifications(true);
-                    defaultSettings.setNotificationReservationCreated(true);
-                    defaultSettings.setNotificationReservationApproved(true);
-                    defaultSettings.setNotificationReservationRejected(true);
-                    defaultSettings.setNotificationNewUser(true);
-                    defaultSettings.setNotificationSystemUpdates(true);
-                    defaultSettings.setNotificationDailyDigest(false);
-                    defaultSettings.setMaxDaysInAdvance(30);
-                    defaultSettings.setMinTimeBeforeReservation(1);
-                    defaultSettings.setMaxHoursPerReservation(4);
-                    defaultSettings.setMaxReservationsPerWeek(5);
-                    defaultSettings.setStudentRequireApproval(true);
-                    defaultSettings.setProfessorRequireApproval(false);
-                    defaultSettings.setShowAvailabilityCalendar(true);
-                    return settingsRepository.save(defaultSettings);
-                });
-        
-        return convertToDTO(settings);
+        return settingsProvider.getSettings();
     }
     
     @Transactional
@@ -52,7 +26,7 @@ public class SettingsService {
                 .findFirst()
                 .orElseGet(SystemSettings::new);
         
-        // Mettre à jour les paramètres généraux
+        // Update general settings
         settings.setSystemName(settingsDTO.getSystemName());
         settings.setTagline(settingsDTO.getTagline());
         settings.setContactEmail(settingsDTO.getContactEmail());
@@ -61,7 +35,7 @@ public class SettingsService {
         settings.setAutoApproveProfessor(settingsDTO.isAutoApproveProfessor());
         settings.setAutoApproveStudent(settingsDTO.isAutoApproveStudent());
         
-        // Mettre à jour les paramètres de notification
+        // Update notification settings
         settings.setEmailNotifications(settingsDTO.isEmailNotifications());
         settings.setNotificationReservationCreated(settingsDTO.isReservationCreated());
         settings.setNotificationReservationApproved(settingsDTO.isReservationApproved());
@@ -70,7 +44,7 @@ public class SettingsService {
         settings.setNotificationSystemUpdates(settingsDTO.isSystemUpdates());
         settings.setNotificationDailyDigest(settingsDTO.isDailyDigest());
         
-        // Mettre à jour les paramètres de réservation
+        // Update reservation settings
         settings.setMaxDaysInAdvance(settingsDTO.getMaxDaysInAdvance());
         settings.setMinTimeBeforeReservation(settingsDTO.getMinTimeBeforeReservation());
         settings.setMaxHoursPerReservation(settingsDTO.getMaxHoursPerReservation());
@@ -80,7 +54,12 @@ public class SettingsService {
         settings.setShowAvailabilityCalendar(settingsDTO.isShowAvailabilityCalendar());
         
         SystemSettings savedSettings = settingsRepository.save(settings);
-        return convertToDTO(savedSettings);
+        SystemSettingsDTO updatedSettings = convertToDTO(savedSettings);
+        
+        // Publish event to notify other components
+        settingsProvider.publishSettingsChangedEvent(updatedSettings);
+        
+        return updatedSettings;
     }
     
     private SystemSettingsDTO convertToDTO(SystemSettings settings) {

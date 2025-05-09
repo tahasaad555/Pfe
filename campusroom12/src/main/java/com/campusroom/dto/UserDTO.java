@@ -1,6 +1,8 @@
 package com.campusroom.dto;
 
 import java.util.Date;
+import java.util.List;
+import java.util.ArrayList;
 
 public class UserDTO {
     private Long id;
@@ -10,13 +12,15 @@ public class UserDTO {
     private String role;
     private String status;
     private Date lastLogin;
+    private List<TimetableEntryDTO> timetableEntries = new ArrayList<>();
 
-    // Constructeurs
+    // Constructors
     public UserDTO() {
     }
 
     public UserDTO(Long id, String firstName, String lastName, String email,
-                   String role, String status, Date lastLogin) {
+                   String role, String status, Date lastLogin,
+                   List<TimetableEntryDTO> timetableEntries) {
         this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -24,6 +28,7 @@ public class UserDTO {
         this.role = role;
         this.status = status;
         this.lastLogin = lastLogin;
+        this.timetableEntries = timetableEntries != null ? timetableEntries : new ArrayList<>();
     }
 
     // Méthode builder statique
@@ -40,6 +45,7 @@ public class UserDTO {
         private String role;
         private String status;
         private Date lastLogin;
+        private List<TimetableEntryDTO> timetableEntries = new ArrayList<>();
 
         public Builder id(Long id) {
             this.id = id;
@@ -75,9 +81,14 @@ public class UserDTO {
             this.lastLogin = lastLogin;
             return this;
         }
+        
+        public Builder timetableEntries(List<TimetableEntryDTO> timetableEntries) {
+            this.timetableEntries = timetableEntries;
+            return this;
+        }
 
         public UserDTO build() {
-            return new UserDTO(id, firstName, lastName, email, role, status, lastLogin);
+            return new UserDTO(id, firstName, lastName, email, role, status, lastLogin, timetableEntries);
         }
     }
 
@@ -89,6 +100,7 @@ public class UserDTO {
     public String getRole() { return role; }
     public String getStatus() { return status; }
     public Date getLastLogin() { return lastLogin; }
+    public List<TimetableEntryDTO> getTimetableEntries() { return timetableEntries; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -98,4 +110,7 @@ public class UserDTO {
     public void setRole(String role) { this.role = role; }
     public void setStatus(String status) { this.status = status; }
     public void setLastLogin(Date lastLogin) { this.lastLogin = lastLogin; }
+    public void setTimetableEntries(List<TimetableEntryDTO> timetableEntries) { 
+        this.timetableEntries = timetableEntries != null ? timetableEntries : new ArrayList<>(); 
+    }
 }

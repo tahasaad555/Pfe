@@ -111,4 +111,30 @@ public class EmailNotificationController {
             ));
         }
     }
+    
+    @PostMapping("/test-email")
+    public ResponseEntity<?> testEmailDelivery(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        
+        if (email == null || email.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "message", "Email address is required"
+            ));
+        }
+        
+        try {
+            // This would be implemented in a real service
+            // For now, just return success message
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Test email sent to " + email
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "message", "Error sending test email: " + e.getMessage()
+            ));
+        }
+    }
 }

@@ -2,6 +2,7 @@ package com.campusroom.service;
 
 import com.campusroom.dto.DemandDTO;
 import com.campusroom.dto.ReservationDTO;
+import com.campusroom.dto.SystemSettingsDTO;
 import com.campusroom.model.Notification;
 import com.campusroom.model.Reservation;
 import com.campusroom.model.User;
@@ -9,11 +10,9 @@ import com.campusroom.repository.NotificationRepository;
 import com.campusroom.repository.ReservationRepository;
 import com.campusroom.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import com.campusroom.service.ReservationEmailService;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -31,9 +30,21 @@ public class ReservationService {
 
     @Autowired
     private NotificationRepository notificationRepository;
-// Then add this field in the class
-@Autowired
-private ReservationEmailService reservationEmailService;
+    
+    @Autowired
+    private ReservationEmailService reservationEmailService;
+    
+    @Autowired
+    private SystemSettingsProvider settingsProvider;
+    
+    private SystemSettingsDTO currentSettings;
+    
+    // Initialize settings on application startup
+    @EventListener(SystemSettingsProvider.SettingsChangedEvent.class)
+    public void handleSettingsChange(SystemSettingsProvider.SettingsChangedEvent event) {
+        this.currentSettings = event.getSettings();
+        System.out.println("ReservationService: Settings updated");
+    }
 
     /**
      * Get all reservations
@@ -70,6 +81,36 @@ private ReservationEmailService reservationEmailService;
                 .map(this::convertToReservationDTO)
                 .collect(Collectors.toList());
     }
+    
+    /**
+     * Get reservations for study rooms
+     */
+    public List<ReservationDTO> getStudyRoomReservations() {
+        System.out.println("ReservationService: getStudyRoomReservations");
+        List<Reservation> studyRoomReservations = reservationRepository.findAll()
+                .stream()
+                .filter(r -> r.getStudyRoom() != null)
+                .collect(Collectors.toList());
+                
+        return studyRoomReservations.stream()
+                .map(this::convertToReservationDTO)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get study room reservations by status
+     */
+    public List<ReservationDTO> getStudyRoomReservationsByStatus(String status) {
+        System.out.println("ReservationService: getStudyRoomReservationsByStatus(" + status + ")");
+        List<Reservation> reservations = reservationRepository.findByStatus(status)
+                .stream()
+                .filter(r -> r.getStudyRoom() != null)
+                .collect(Collectors.toList());
+
+        return reservations.stream()
+                .map(this::convertToReservationDTO)
+                .collect(Collectors.toList());
+    }
 
     /**
      * Get pending demands
@@ -83,60 +124,109 @@ private ReservationEmailService reservationEmailService;
                 .collect(Collectors.toList());
     }
 
-    // Update the approveReservation method
-@Transactional
-public ReservationDTO approveReservation(String id) {
-    System.out.println("ReservationService: approveReservation(" + id + ")");
+    /**
+     * Get pending demands with filters
+     */
+    public List<DemandDTO> getPendingDemands(String role, String date) {
+        System.out.println("ReservationService: getPendingDemands with filters");
+        List<Reservation> pendingReservations = reservationRepository.findByStatus("PENDING");
+        
+        // Apply filters if provided
+        if (role != null && !role.isEmpty()) {
+            pendingReservations = pendingReservations.stream()
+                .filter(r -> r.getUser().getRole().name().equalsIgnoreCase(role))
+                .collect(Collectors.toList());
+        }
+        
+        // Filter by date if provided (month)
+        if (date != null && !date.isEmpty()) {
+            // Implementation would depend on how you want to filter by date
+            // This is a simple example assuming date is a month name or number
+            pendingReservations = pendingReservations.stream()
+                .filter(r -> {
+                    SimpleDateFormat monthFormat = new SimpleDateFormat("MM");
+                    String reservationMonth = monthFormat.format(r.getDate());
+                    return reservationMonth.equals(date);
+                })
+                .collect(Collectors.toList());
+        }
 
-    Reservation reservation = reservationRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Reservation not found with id: " + id));
-
-    if (!"PENDING".equals(reservation.getStatus())) {
-        throw new RuntimeException("Can only approve pending reservations");
+        return pendingReservations.stream()
+                .map(this::convertToDemandDTO)
+                .collect(Collectors.toList());
     }
-
-    reservation.setStatus("APPROVED");
-    Reservation updatedReservation = reservationRepository.save(reservation);
-
-    // Create notification for the user
-    createApprovalNotification(updatedReservation);
     
-    // Send email notification to the user - AJOUT
-    reservationEmailService.sendReservationStatusEmail(updatedReservation, "APPROVED", null);
 
-    return convertToReservationDTO(updatedReservation);
-}
+   @Transactional
+    public ReservationDTO approveReservation(String id) {
+        System.out.println("ReservationService: approveReservation(" + id + ")");
 
-    // Update the rejectReservation method
-@Transactional
-public ReservationDTO rejectReservation(String id, String reason) {  // Added reason parameter
-    System.out.println("ReservationService: rejectReservation(" + id + ")");
+        // Ensure settings are loaded
+        if (currentSettings == null) {
+            currentSettings = settingsProvider.getSettings();
+        }
 
-    Reservation reservation = reservationRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Reservation not found with id: " + id));
+        Reservation reservation = reservationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Reservation not found with id: " + id));
 
-    if (!"PENDING".equals(reservation.getStatus())) {
-        throw new RuntimeException("Can only reject pending reservations");
+        if (!"PENDING".equals(reservation.getStatus())) {
+            throw new RuntimeException("Can only approve pending reservations");
+        }
+
+        reservation.setStatus("APPROVED");
+        Reservation updatedReservation = reservationRepository.save(reservation);
+
+        // Create notification for the user
+        createApprovalNotification(updatedReservation);
+        
+        // Send email notification only if enabled in settings
+        if (currentSettings.isEmailNotifications() && 
+            currentSettings.isReservationApproved()) {
+            boolean emailSent = reservationEmailService.sendReservationStatusEmail(updatedReservation, "APPROVED", null);
+            System.out.println("Approval email sent: " + emailSent);
+        }
+
+        return convertToReservationDTO(updatedReservation);
     }
 
-    reservation.setStatus("REJECTED");
-    // Save reason if provided
-    if (reason != null && !reason.isEmpty()) {
-        reservation.setNotes(reason);  // Use the notes field to store rejection reason
+    @Transactional
+    public ReservationDTO rejectReservation(String id, String reason) {
+        System.out.println("ReservationService: rejectReservation(" + id + ")");
+
+        // Ensure settings are loaded
+        if (currentSettings == null) {
+            currentSettings = settingsProvider.getSettings();
+        }
+
+        Reservation reservation = reservationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Reservation not found with id: " + id));
+
+        if (!"PENDING".equals(reservation.getStatus())) {
+            throw new RuntimeException("Can only reject pending reservations");
+        }
+
+        reservation.setStatus("REJECTED");
+        // Save reason if provided
+        if (reason != null && !reason.isEmpty()) {
+            reservation.setNotes(reason);  // Use the notes field to store rejection reason
+        }
+        Reservation updatedReservation = reservationRepository.save(reservation);
+
+        // Create notification for the user
+        createRejectionNotification(updatedReservation);
+        
+        // Send email notification only if enabled in settings
+        if (currentSettings.isEmailNotifications() && 
+            currentSettings.isReservationRejected()) {
+            boolean emailSent = reservationEmailService.sendReservationStatusEmail(updatedReservation, "REJECTED", reason);
+            System.out.println("Rejection email sent: " + emailSent);
+        }
+
+        return convertToReservationDTO(updatedReservation);
     }
-    Reservation updatedReservation = reservationRepository.save(reservation);
-
-    // Create notification for the user
-    createRejectionNotification(updatedReservation);
-    
-    // Send email notification to the user - AJOUT
-    reservationEmailService.sendReservationStatusEmail(updatedReservation, "REJECTED", reason);
-
-    return convertToReservationDTO(updatedReservation);
-}
 
     /**
-     * Cancel a reservation
+     * Cancel a reservation (can be done by user or admin)
      */
     @Transactional
     public ReservationDTO cancelReservation(String id) {
@@ -155,6 +245,13 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
 
         // Create notification for admins
         createCancellationNotification(updatedReservation);
+        
+        // Create notification for the user
+        createUserCancellationNotification(updatedReservation);
+        
+        // Send cancellation email to the user
+        boolean emailSent = reservationEmailService.sendCancellationEmail(updatedReservation);
+        System.out.println("Cancellation email sent: " + emailSent);
 
         return convertToReservationDTO(updatedReservation);
     }
@@ -166,12 +263,13 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
         User user = reservation.getUser();
 
         Notification notification = new Notification();
-        notification.setTitle("Réservation approuvée");
-        notification.setMessage("Votre demande de réservation pour la salle "
-                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
-                + " le " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                + " de " + reservation.getStartTime() + " à " + reservation.getEndTime()
-                + " a été approuvée.");
+        notification.setTitle("Reservation Approved");
+        notification.setMessage("Your reservation request for "
+                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
+                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
+                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+                + " has been approved.");
         notification.setUser(user);
         notification.setRead(false);
         notification.setIconClass("fas fa-check-circle");
@@ -187,12 +285,15 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
         User user = reservation.getUser();
 
         Notification notification = new Notification();
-        notification.setTitle("Réservation refusée");
-        notification.setMessage("Votre demande de réservation pour la salle "
-                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
-                + " le " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                + " de " + reservation.getStartTime() + " à " + reservation.getEndTime()
-                + " a été refusée.");
+        notification.setTitle("Reservation Rejected");
+        notification.setMessage("Your reservation request for "
+                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
+                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
+                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+                + " has been rejected."
+                + (reservation.getNotes() != null && !reservation.getNotes().isEmpty() ? 
+                   " Reason: " + reservation.getNotes() : ""));
         notification.setUser(user);
         notification.setRead(false);
         notification.setIconClass("fas fa-times-circle");
@@ -210,12 +311,13 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
 
         for (User admin : admins) {
             Notification notification = new Notification();
-            notification.setTitle("Réservation annulée");
+            notification.setTitle("Reservation Cancelled");
             notification.setMessage(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName()
-                    + " a annulé sa réservation pour la salle "
-                    + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
-                    + " le " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                    + " de " + reservation.getStartTime() + " à " + reservation.getEndTime() + ".");
+                    + " has cancelled their reservation for "
+                    + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
+                       (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
+                    + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+                    + " from " + reservation.getStartTime() + " to " + reservation.getEndTime() + ".");
             notification.setUser(admin);
             notification.setRead(false);
             notification.setIconClass("fas fa-calendar-times");
@@ -223,6 +325,28 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
 
             notificationRepository.save(notification);
         }
+    }
+    
+    /**
+     * Create a notification for the user when their reservation is cancelled
+     */
+    private void createUserCancellationNotification(Reservation reservation) {
+        User user = reservation.getUser();
+
+        Notification notification = new Notification();
+        notification.setTitle("Reservation Cancelled");
+        notification.setMessage("Your reservation for "
+                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
+                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
+                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+                + " has been cancelled.");
+        notification.setUser(user);
+        notification.setRead(false);
+        notification.setIconClass("fas fa-calendar-times");
+        notification.setIconColor("orange");
+
+        notificationRepository.save(notification);
     }
 
     /**
@@ -247,6 +371,7 @@ public ReservationDTO rejectReservation(String id, String reason) {  // Added re
 
     /**
      * Convert Reservation entity to DemandDTO
+     * Used for pending requests display in admin dashboard
      */
     private DemandDTO convertToDemandDTO(Reservation reservation) {
         String roomName = reservation.getClassroom() != null

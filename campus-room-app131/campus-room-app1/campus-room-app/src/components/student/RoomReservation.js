@@ -2,135 +2,238 @@ import React, { useState, useEffect } from 'react';
 import '../../styles/dashboard.css';
 import API from '../../api';
 import ReservationEmailService from '../../services/ReservationEmailService';
-import { useAuth } from '../../contexts/AuthContext'; // Import the auth context
+import { useAuth } from '../../contexts/AuthContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-function StudyRoomReservation({ fullPage = false }) {
+const RoomReservation = ({ fullPage = false }) => {
+  const { currentUser } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryParams = new URLSearchParams(location.search);
+  const isEditMode = queryParams.get('edit') === 'true';
+  
   const [formData, setFormData] = useState({
+    id: '',
     date: '',
     startTime: '',
     endTime: '',
+    classType: '',
+    capacity: '',
     purpose: '',
-    notes: ''
+    notes: '',
+    classroomId: '',
+    isEdit: false // Flag for edit mode
   });
+  
   const [searchResults, setSearchResults] = useState([]);
-  const [allStudyRooms, setAllStudyRooms] = useState([]);
-  const [selectedStudyRoom, setSelectedStudyRoom] = useState(null);
+  const [allClassrooms, setAllClassrooms] = useState([]);
+  const [selectedClassroom, setSelectedClassroom] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [searchPerformed, setSearchPerformed] = useState(false);
-  const [viewMode, setViewMode] = useState('all'); // 'all' or 'search'
+  const [viewMode, setViewMode] = useState('all'); // 'all' ou 'search'
   const [fetchError, setFetchError] = useState(null);
-  const { currentUser } = useAuth(); // Get current user for authentication status
 
-  // Load all study rooms when component mounts
+  // Load all classrooms when component mounts
   useEffect(() => {
-    fetchAllStudyRooms();
-  }, []);
+    fetchAllClassrooms();
+    
+    // Process any queued emails that couldn't be sent previously
+    const processQueuedEmails = async () => {
+      try {
+        const result = await ReservationEmailService.processEmailQueue();
+        if (result.success > 0) {
+          console.log(`Processed ${result.success} queued emails`);
+        }
+      } catch (error) {
+        console.error('Error processing email queue:', error);
+      }
+    };
+    
+    processQueuedEmails();
+    
+    // Check if we're in edit mode and load reservation data
+    if (isEditMode) {
+      loadReservationForEditing();
+    }
+  }, [isEditMode]);
 
-  // Function to fetch all study rooms using the API service
-  const fetchAllStudyRooms = async () => {
+  const validateTimeRange = () => {
+    if (!formData.startTime || !formData.endTime) return true;
+    
+    const startTime = formData.startTime;
+    const endTime = formData.endTime;
+    
+    console.log('Validating times: Start =', startTime, 'End =', endTime);
+    
+    // Convert to minutes since midnight
+    const getMinutes = (time) => {
+      const [hours, minutes] = time.split(':').map(Number);
+      const totalMinutes = hours * 60 + minutes;
+      console.log(`Converting ${time}: ${hours}h × 60 + ${minutes}m = ${totalMinutes} minutes`);
+      return totalMinutes;
+    };
+    
+    const startMinutes = getMinutes(startTime);
+    const endMinutes = getMinutes(endTime);
+    
+    console.log('Start minutes:', startMinutes, 'End minutes:', endMinutes, 'Difference:', endMinutes - startMinutes);
+    
+    // Validate time range (8:00 - 18:00)
+    const min = getMinutes('08:00');
+    const max = getMinutes('18:00');
+    if (endMinutes === startMinutes) {
+      setMessage({
+        text: 'End time must be different than start time',
+        type: 'error'
+      });
+      return false;
+    }
+    
+    if (endMinutes < startMinutes) {
+      setMessage({
+        text: 'End time must be after start time',
+        type: 'error'
+      });
+      return false;
+    }
+    
+    console.log('Time validation passed');
+    return true;
+  };
+
+  // Function to load reservation data for editing
+  const loadReservationForEditing = () => {
+    try {
+      const editingReservation = localStorage.getItem('editingReservation');
+      if (!editingReservation) {
+        console.error('No reservation data found for editing');
+        setMessage({ text: 'No reservation data found for editing', type: 'error' });
+        return;
+      }
+      
+      const reservationData = JSON.parse(editingReservation);
+      console.log('Loaded reservation data for editing:', reservationData);
+      
+      // Set form data with the reservation values
+      setFormData({
+        id: reservationData.id || '',
+        date: reservationData.date || '',
+        startTime: reservationData.startTime || '',
+        endTime: reservationData.endTime || '',
+        classType: reservationData.classType || '',
+        capacity: reservationData.capacity || '10', // Default capacity if none provided
+        purpose: reservationData.purpose || '',
+        notes: reservationData.notes || '',
+        classroomId: reservationData.classroomId || '',
+        isEdit: true // Flag this as an edit operation
+      });
+      
+      // Set view mode to search to show the form
+      setViewMode('search');
+      
+      // Find the classroom from the stored information and set it as selected
+      if (reservationData.classroomId) {
+        // We'll set the selected classroom when fetchAllClassrooms completes
+        // The effect that depends on allClassrooms will handle this
+      } else if (reservationData.classroom) {
+        // If we only have the classroom name, we'll try to find it by name after loading
+        console.log('Will search for classroom by name:', reservationData.classroom);
+      }
+    } catch (error) {
+      console.error('Error loading reservation data for editing:', error);
+      setMessage({ text: 'Error loading reservation data for editing', type: 'error' });
+    }
+  };
+  
+  // Effect to set the selected classroom after all classrooms are loaded in edit mode
+  useEffect(() => {
+    if (isEditMode && allClassrooms.length > 0) {
+      const editingReservation = JSON.parse(localStorage.getItem('editingReservation') || '{}');
+      
+      // Try to find the classroom either by ID or by name
+      let classroom = null;
+      
+      if (editingReservation.classroomId) {
+        classroom = allClassrooms.find(c => c.id === editingReservation.classroomId);
+      }
+      
+      if (!classroom && editingReservation.classroom) {
+        classroom = allClassrooms.find(c => 
+          c.roomNumber === editingReservation.classroom || 
+          c.name === editingReservation.classroom
+        );
+      }
+      
+      if (classroom) {
+        console.log('Found classroom for editing:', classroom);
+        setSelectedClassroom(classroom);
+        
+        // Update the formData with the classroom ID if it wasn't set
+        if (!formData.classroomId) {
+          setFormData(prev => ({
+            ...prev,
+            classroomId: classroom.id
+          }));
+        }
+      } else {
+        console.warn('Could not find matching classroom for editing');
+      }
+    }
+  }, [allClassrooms, isEditMode, formData.classroomId]);
+
+  // Create fallback methods if API is not properly defined
+useEffect(() => {
+  if (!API.studentAPI) {
+    console.error('studentAPI is undefined, creating fallback methods');
+    // Create fallback methods for student
+    API.studentAPI = {
+      searchAvailableClassrooms: (criteria) => API.post('/api/student/classrooms/search', criteria),
+      requestClassroomReservation: (data) => API.post('/api/student/classroom-reservations', data),
+      // Other necessary methods...
+    };
+  }
+}, []);
+
+  // Function to fetch all classrooms using the API service
+  const fetchAllClassrooms = async () => {
     setIsLoading(true);
     setFetchError(null);
     
     try {
       // Try multiple possible endpoints in case one fails
       let response;
-      let studyRoomsData = [];
-      let error = null;
-      
-      // First try: studentAPI service
       try {
-        response = await API.studentAPI.getStudyRooms();
-        studyRoomsData = response.data;
-        console.log('Successfully fetched study rooms from student API');
+        response = await API.get('/api/rooms/classrooms');
       } catch (err) {
-        console.error('Error using student API endpoint:', err);
-        error = err;
-        
-        // Second try: general rooms endpoint
+        console.error('Error using primary endpoint:', err);
+        // Direct fallback with fetch
         try {
-          response = await API.get('/api/rooms/study-rooms', {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          });
-          studyRoomsData = response.data;
-          console.log('Successfully fetched study rooms from general API');
+          response = await API.get('/api/classrooms');
         } catch (secondErr) {
-          console.error('Error using general rooms endpoint:', secondErr);
-          error = secondErr;
-          
-          // Third try: public endpoint as last resort
-          try {
-            response = await API.get('/api/rooms/public-studyrooms');
-            studyRoomsData = response.data;
-            console.log('Successfully fetched study rooms from public API');
-          } catch (thirdErr) {
-            console.error('Error using public endpoint:', thirdErr);
-            throw thirdErr; // If all API attempts fail, throw the last error
-          }
+          console.error('Error using secondary endpoint:', secondErr);
+          // Final fallback
+          response = await fetch('/public-classrooms').then(res => res.json()).then(data => ({ data }));
         }
       }
       
-      console.log('Study rooms data fetched:', studyRoomsData);
+      const data = response.data;
+      console.log('Classrooms data fetched:', data);
+      setAllClassrooms(data);
       
-      // If we made it here, we have some data
-      if (studyRoomsData && Array.isArray(studyRoomsData)) {
-        setAllStudyRooms(studyRoomsData);
-        
-        if (studyRoomsData.length === 0) {
-          setMessage({ 
-            text: 'Aucune salle d\'étude n\'est disponible actuellement.',
-            type: 'warning' 
-          });
-        }
-      } else {
-        // Handle case when the data is not an array
-        console.error('Received invalid data format:', studyRoomsData);
-        throw new Error('Invalid data format received');
+      if (data.length === 0) {
+        setMessage({ 
+          text: 'No classrooms available at the moment.', 
+          type: 'warning' 
+        });
       }
-      
     } catch (error) {
-      console.error('Error fetching study rooms:', error);
-      setFetchError(error.message || 'Une erreur est survenue lors du chargement des salles d\'étude');
+      console.error('Error fetching classrooms:', error);
+      setFetchError(error.message || 'An error occurred while loading classrooms');
       setMessage({ 
-        text: 'Une erreur est survenue lors du chargement des salles d\'étude',
+        text: 'An error occurred while loading classrooms', 
         type: 'error' 
       });
-      
-      // Fall back to mock data if everything fails
-      const mockStudyRooms = [
-        {
-          id: 'SR001',
-          name: 'Study Room 101',
-          type: 'Group Study',
-          capacity: 8,
-          features: ['Whiteboard', 'Projector', 'Power Outlets'],
-          availableTimes: '8AM - 9PM',
-          image: '/images/study-room-default.jpg'
-        },
-        {
-          id: 'SR002',
-          name: 'Quiet Room 202',
-          type: 'Individual Study',
-          capacity: 4,
-          features: ['Silent Area', 'Desk Lamps', 'Power Outlets'],
-          availableTimes: '8AM - 10PM',
-          image: '/images/study-room-default.jpg'
-        },
-        {
-          id: 'SR003',
-          name: 'Library Study Space',
-          type: 'Open Area',
-          capacity: 12,
-          features: ['Large Tables', 'Natural Lighting', 'WiFi'],
-          availableTimes: '9AM - 8PM',
-          image: '/images/study-room-default.jpg'
-        }
-      ];
-      
-      setAllStudyRooms(mockStudyRooms);
-      console.log('Using mock data due to API failure');
     } finally {
       setIsLoading(false);
     }
@@ -144,19 +247,34 @@ function StudyRoomReservation({ fullPage = false }) {
     }));
   };
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setMessage({ text: '', type: '' });
-    setSearchResults([]);
-    setSelectedStudyRoom(null);
-    setSearchPerformed(true);
-    setViewMode('search');
+ // Then update the handleSearch function around line 150
+const handleSearch = async (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setMessage({ text: '', type: '' });
+  setSearchResults([]);
+  setSelectedClassroom(null);
+  setSearchPerformed(true);
+  setViewMode('search');
 
-    try {
-      // Validate inputs
-      if (!formData.date || !formData.startTime || !formData.endTime) {
-        setMessage({ text: 'Veuillez remplir tous les champs obligatoires', type: 'error' });
+  try {
+    // Validate inputs
+    if (!formData.date || !formData.startTime || !formData.endTime || !formData.capacity) {
+      setMessage({ text: 'Please fill in all required fields', type: 'error' });
+      setIsLoading(false);
+      return;
+    }
+
+    // Add the validation check here
+    if (!validateTimeRange()) {
+      setIsLoading(false);
+      return;
+    }
+
+      // Convert capacity to number
+      const capacityNum = parseInt(formData.capacity, 10);
+      if (isNaN(capacityNum) || capacityNum <= 0) {
+        setMessage({ text: 'Capacity must be a positive number', type: 'error' });
         setIsLoading(false);
         return;
       }
@@ -165,142 +283,217 @@ function StudyRoomReservation({ fullPage = false }) {
       const searchRequest = {
         date: formData.date,
         startTime: formData.startTime,
-        endTime: formData.endTime
+        endTime: formData.endTime,
+        classType: formData.classType || '',
+        capacity: capacityNum
       };
       
-      console.log('Searching available study rooms with request:', searchRequest);
+      console.log('Searching available classrooms with request:', searchRequest);
       
-      // For demo purposes, we'll filter the already loaded study rooms
-      // In a real app, this would be a server-side API call
+      // Use the API service with fallback
+      // Use the API service with fallback
+let response;
+try {
+  response = await API.studentAPI.searchAvailableClassrooms(searchRequest);
+} catch (err) {
+  console.error('Error using API service for search:', err);
+  
+  // If it's an authentication error, let the interceptor handle it
+  if (err.response && err.response.status === 401) {
+    throw err;
+  }
+  
+  // Direct fallback with fetch
+  const fetchResponse = await fetch('/api/student/classrooms/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify(searchRequest)
+  });
+  
+  if (!fetchResponse.ok) {
+    throw new Error(`Failed to search classrooms: ${fetchResponse.status}`);
+  }
+  
+  response = { 
+    data: await fetchResponse.json() 
+  };
+}
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const data = response.data;
+      console.log('Search results:', data);
       
-      // Filter the rooms (in real app, this would be on server)
-      const filteredRooms = allStudyRooms.filter(room => {
-        // Simple filter - in real app this would be based on actual availability
-        return true; // Return all rooms for now
-      });
+      setSearchResults(data);
       
-      setSearchResults(filteredRooms);
-      
-      if (filteredRooms.length === 0) {
-        setMessage({ text: 'Aucune salle d\'étude disponible ne correspond à vos critères', type: 'warning' });
+      if (data.length === 0) {
+        setMessage({ text: 'No classrooms match your criteria', type: 'warning' });
       } else {
-        setMessage({ text: `${filteredRooms.length} salles d'étude disponibles trouvées`, type: 'success' });
+        setMessage({ text: `${data.length} available classrooms found`, type: 'success' });
       }
     } catch (error) {
-      console.error('Error searching study rooms:', error);
-      setMessage({ text: 'Une erreur est survenue lors de la recherche: ' + (error.response?.data?.message || error.message), type: 'error' });
+      console.error('Error searching classrooms:', error);
+      setMessage({ text: 'An error occurred during search: ' + (error.response?.data?.message || error.message), type: 'error' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSelectStudyRoom = (studyRoom) => {
-    setSelectedStudyRoom(studyRoom);
+  const handleSelectClassroom = (classroom) => {
+    setSelectedClassroom(classroom);
+    
+    // Update form with classroom ID
+    setFormData(prev => ({
+      ...prev,
+      classroomId: classroom.id
+    }));
   };
 
-  const handleSubmitReservation = async () => {
-    if (!selectedStudyRoom) {
-      setMessage({ text: 'Veuillez sélectionner une salle d\'étude', type: 'error' });
-      return;
-    }
+  // Fixed submitReservation function that handles both create and edit operations
+ // Finally update the handleSubmitReservation function around line 235
+const handleSubmitReservation = async () => {
+  if (!selectedClassroom && !formData.classroomId) {
+    setMessage({ text: 'Please select a classroom', type: 'error' });
+    return;
+  }
 
-    if (!formData.purpose) {
-      setMessage({ text: 'Veuillez indiquer le motif de la réservation', type: 'error' });
-      return;
-    }
+  if (!formData.purpose) {
+    setMessage({ text: 'Please provide a purpose for the reservation', type: 'error' });
+    return;
+  }
 
-    setIsLoading(true);
-    setMessage({ text: '', type: '' });
+  // Add the validation check here
+  if (!validateTimeRange()) {
+    return;
+  }
+
+  setIsLoading(true);
+  setMessage({ text: '', type: '' });
+
+
 
     try {
       // Verify token is present
       const token = localStorage.getItem('token');
       if (!token) {
         console.error('No authentication token found');
-        setMessage({ text: 'Vous devez être connecté pour effectuer cette action', type: 'error' });
+        setMessage({ text: 'You must be logged in to perform this action', type: 'error' });
         setTimeout(() => {
           window.location.href = '/';
         }, 2000);
         return;
       }
 
-      // Create the request object in the format expected by the backend
+      // Create request object in format expected by backend
       const requestBody = {
-        roomId: selectedStudyRoom.id,
+        classroomId: formData.classroomId || selectedClassroom.id,
         date: formData.date,
         startTime: formData.startTime,
         endTime: formData.endTime,
         purpose: formData.purpose,
-        notes: formData.notes || ""
+        notes: formData.notes || "", // Use empty string if notes is null/undefined
+        classType: formData.classType || selectedClassroom.type,
+        capacity: parseInt(formData.capacity, 10) || selectedClassroom.capacity
       };
 
-      console.log('Sending study room reservation request:', requestBody);
-      
-      // Use the API service - now fixed with proper studentAPI implementation
-      const response = await API.studentAPI.requestStudyRoomReservation(selectedStudyRoom.id, {
-        date: formData.date,
-        startTime: formData.startTime,
-        endTime: formData.endTime,
-        purpose: formData.purpose,
-        notes: formData.notes || ""
-      });
-      
-      const data = response.data;
-      console.log('Reservation success response:', data);
-      
-      // Send email notification to admin
-      try {
-        const reservationData = {
-          id: data.id || 'NEW_REQUEST',
-          room: selectedStudyRoom.name,
-          reservedBy: currentUser?.name || 'Student',
-          role: 'STUDENT',
-          date: formData.date,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
-          purpose: formData.purpose,
-          notes: formData.notes || "",
-          userEmail: currentUser?.email || ''
-        };
+      // If we're editing an existing reservation, include the ID
+      if (formData.isEdit && formData.id) {
+        requestBody.id = formData.id;
+        console.log('Updating existing reservation:', requestBody);
         
-        await ReservationEmailService.notifyAdminAboutNewRequest(reservationData);
-        console.log('Admin notification email sent successfully');
-      } catch (emailError) {
-        console.error('Error sending admin notification email:', emailError);
-        // Continue process even if email fails
+        // For update operations, use PUT
+        // First try direct endpoint for updating
+    // For update operations, use PUT
+// First try direct endpoint for updating
+try {
+  // Try to use a direct PUT endpoint for updates
+  const response = await API.put(`/api/student/classroom-reservations/${formData.id}`, requestBody);
+  console.log('Update reservation success response:', response.data);
+} catch (updateErr) {
+  console.error('Direct update failed, attempting alternative method:', updateErr);
+  
+  // If direct update fails, first cancel the existing reservation
+  await API.put(`/api/student/reservations/${formData.id}/cancel`);
+  console.log('Successfully cancelled old reservation before replacement');
+  
+  // Then create a new reservation with the updated details
+  const response = await API.studentAPI.requestClassroomReservation(requestBody);
+  console.log('Created replacement reservation:', response.data);
+}
+      } else {
+        // For new reservations, use POST
+       // For new reservations, use POST
+console.log('Creating new reservation:', requestBody);
+const response = await API.studentAPI.requestClassroomReservation(requestBody);
+console.log('Create reservation success response:', response.data);
+        // Send email notification to admin for new reservations only (not updates)
+        try {
+        // Around line 323: Update the reservationData object
+const reservationData = {
+  id: response.data?.reservation?.id || response.data?.id || 'NEW_REQUEST',
+  room: selectedClassroom.roomNumber,
+  reservedBy: currentUser?.firstName + ' ' + currentUser?.lastName || 'Student', // Update name format
+  role: 'STUDENT', // Change from PROFESSOR to STUDENT
+  date: formData.date,
+  time: `${formData.startTime} - ${formData.endTime}`,
+  purpose: formData.purpose,
+  notes: formData.notes || "",
+  userEmail: currentUser?.email || ''
+};
+          
+          await ReservationEmailService.notifyAdminAboutNewRequest(reservationData);
+          console.log('Admin notification email sent successfully');
+        } catch (emailError) {
+          console.error('Error sending admin notification email:', emailError);
+          // Continue process even if email fails
+        }
+      }
+
+      // Clean up localStorage if we were editing
+      if (isEditMode) {
+        localStorage.removeItem('editingReservation');
       }
 
       // Reset form and show success message
       setFormData({
+        id: '',
         date: '',
         startTime: '',
         endTime: '',
+        classType: '',
+        capacity: '',
         purpose: '',
-        notes: ''
+        notes: '',
+        isEdit: false
       });
       setSearchResults([]);
-      setSelectedStudyRoom(null);
+      setSelectedClassroom(null);
       setSearchPerformed(false);
       setViewMode('all');
+      
+      const actionType = isEditMode ? 'updated' : 'submitted';
       setMessage({ 
-        text: 'Votre demande de réservation de salle d\'étude a été soumise avec succès et est en attente d\'approbation. Un email de confirmation vous sera envoyé une fois la demande traitée.',
+        text: `Your reservation request has been ${actionType} successfully and is pending approval. A confirmation email will be sent once the request is processed.`, 
         type: 'success' 
       });
+      
+      // Redirect back to reservations page after a short delay
+      setTimeout(() => {
+        navigate('/student/reservations'); // Change from /professor/reservations to /student/reservations
+      }, 3000);
     } catch (error) {
       console.error('Error submitting reservation:', error);
       
       if (error.response && error.response.status === 401) {
         // The interceptor will handle the redirect
         setMessage({ 
-          text: 'Votre session a expiré. Vous allez être redirigé vers la page de connexion...', 
+          text: 'Your session has expired. You will be redirected to the login page...', 
           type: 'error' 
         });
       } else {
         setMessage({ 
-          text: error.response?.data?.message || error.message || 'Une erreur est survenue lors de la soumission de la demande',
+          text: error.response?.data?.message || error.message || 'An error occurred while submitting the request', 
           type: 'error' 
         });
       }
@@ -310,28 +503,315 @@ function StudyRoomReservation({ fullPage = false }) {
   };
 
   // Functions to change view
-  const showAllStudyRooms = () => {
+  const showAllClassrooms = () => {
     setViewMode('all');
     setSearchPerformed(false);
-    setSelectedStudyRoom(null);
+    setSelectedClassroom(null);
   };
 
   const showSearchForm = () => {
     setViewMode('search');
   };
 
-  // Function to refresh study rooms
+  // Function to refresh classrooms
   const handleRefresh = () => {
-    fetchAllStudyRooms();
+    fetchAllClassrooms();
+  };
+
+  // Render search form
+  const renderSearchForm = () => {
+    return (
+      <form id="reserve-classroom-form" onSubmit={handleSearch}>
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="reservation-date">Date <span className="required">*</span></label>
+            <input 
+              type="date" 
+              id="reservation-date" 
+              name="date" 
+              value={formData.date}
+              onChange={handleChange}
+              required 
+              min={new Date().toISOString().split('T')[0]} // Prevent past dates
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="start-time">Start Time <span className="required">*</span></label>
+            <input 
+              type="time" 
+              id="start-time" 
+              name="startTime" 
+              value={formData.startTime}
+              onChange={handleChange}
+              required 
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="end-time">End Time <span className="required">*</span></label>
+            <input 
+              type="time" 
+              id="end-time" 
+              name="endTime" 
+              value={formData.endTime}
+              onChange={handleChange}
+              required 
+            />
+          </div>
+        </div>
+        
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="class-type">Room Type</label>
+            <select 
+              id="class-type" 
+              name="classType" 
+              value={formData.classType}
+              onChange={handleChange}
+            >
+              <option value="">All Types</option>
+              <option value="Lecture Hall">Lecture Hall</option>
+              <option value="Classroom">Classroom</option>
+              <option value="Computer Lab">Computer Lab</option>
+              <option value="Conference Room">Conference Room</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="capacity-needed">Minimum Capacity <span className="required">*</span></label>
+            <input 
+              type="number" 
+              id="capacity-needed" 
+              name="capacity" 
+              min="1" 
+              value={formData.capacity}
+              onChange={handleChange}
+              required 
+            />
+          </div>
+        </div>
+        
+        <button type="submit" className="btn-primary" disabled={isLoading}>
+          {isLoading ? 'Searching...' : 'Search Available Classrooms'}
+        </button>
+      </form>
+    );
+  };
+
+  const renderSearchResults = () => {
+    if (!searchPerformed) return null;
+    
+    return (
+      <div className="search-results-container">
+        <h3>Available Classrooms</h3>
+        
+        {searchResults.length === 0 ? (
+          <p>No available classrooms match your criteria. Please modify your search.</p>
+        ) : (
+          <div className="classroom-grid">
+            {searchResults.map(classroom => (
+              <div 
+                key={classroom.id} 
+                className={`classroom-card ${selectedClassroom && selectedClassroom.id === classroom.id ? 'selected' : ''}`}
+                onClick={() => handleSelectClassroom(classroom)}
+              >
+                {/* Classroom image */}
+                <div className="classroom-image">
+                  <img 
+                    src={classroom.image || '/images/classroom-default.jpg'} 
+                    alt={classroom.roomNumber}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = '/images/classroom-default.jpg';
+                    }}
+                  />
+                </div>
+                <h4>{classroom.roomNumber}</h4>
+                <p><strong>Type:</strong> {classroom.type}</p>
+                <p><strong>Capacity:</strong> {classroom.capacity} people</p>
+                {classroom.features && classroom.features.length > 0 && (
+                  <div className="features">
+                    <p><strong>Features:</strong></p>
+                    <ul>
+                      {classroom.features.map((feature, index) => (
+                        <li key={index}>{feature}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAllClassrooms = () => {
+    return (
+      <div className="all-classrooms-container">
+        <h3>
+          All Available Classrooms
+          <button onClick={handleRefresh} className="refresh-button" disabled={isLoading}>
+            {isLoading ? 'Loading...' : '🔄 Refresh'}
+          </button>
+        </h3>
+        
+        {isLoading ? (
+          <p>Loading classrooms...</p>
+        ) : allClassrooms.length === 0 ? (
+          <div>
+            <p>No classrooms available at the moment.</p>
+            {fetchError && <p style={{color: 'red'}}>Error: {fetchError}</p>}
+            <button onClick={handleRefresh} className="btn-secondary">Try Again</button>
+          </div>
+        ) : (
+          <div className="classroom-grid">
+            {allClassrooms.map(classroom => (
+              <div 
+                key={classroom.id} 
+                className={`classroom-card ${selectedClassroom && selectedClassroom.id === classroom.id ? 'selected' : ''}`}
+                onClick={() => handleSelectClassroom(classroom)}
+              >
+                {/* Classroom image */}
+                <div className="classroom-image">
+                  <img 
+                    src={classroom.image || '/images/classroom-default.jpg'} 
+                    alt={classroom.roomNumber}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = '/images/classroom-default.jpg';
+                    }}
+                  />
+                </div>
+                <h4>{classroom.roomNumber}</h4>
+                <p><strong>Type:</strong> {classroom.type}</p>
+                <p><strong>Capacity:</strong> {classroom.capacity} people</p>
+                {classroom.features && classroom.features.length > 0 && (
+                  <div className="features">
+                    <p><strong>Features:</strong></p>
+                    <ul>
+                      {classroom.features.map((feature, index) => (
+                        <li key={index}>{feature}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderReservationForm = () => {
+    if (!selectedClassroom) return null;
+    
+    return (
+      <div className="reservation-details-container">
+        <h3>{isEditMode ? 'Edit Reservation' : 'Finalize Reservation'}</h3>
+        <div className="selected-classroom-info">
+          {/* Selected classroom image */}
+          <div className="selected-classroom-image">
+            <img 
+              src={selectedClassroom.image || '/images/classroom-default.jpg'} 
+              alt={selectedClassroom.roomNumber}
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = '/images/classroom-default.jpg';
+              }}
+            />
+          </div>
+          <h4>Selected Classroom: {selectedClassroom.roomNumber}</h4>
+          <p>Type: {selectedClassroom.type} | Capacity: {selectedClassroom.capacity} people</p>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="reservation-date">Date <span className="required">*</span></label>
+          <input 
+            type="date" 
+            id="reservation-date" 
+            name="date" 
+            value={formData.date}
+            onChange={handleChange}
+            required 
+            min={new Date().toISOString().split('T')[0]} // Prevent past dates
+          />
+        </div>
+        
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="start-time">Start Time <span className="required">*</span></label>
+            <input 
+              type="time" 
+              id="start-time" 
+              name="startTime" 
+              value={formData.startTime}
+              onChange={handleChange}
+              required 
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="end-time">End Time <span className="required">*</span></label>
+            <input 
+              type="time" 
+              id="end-time" 
+              name="endTime" 
+              value={formData.endTime}
+              onChange={handleChange}
+              required 
+            />
+          </div>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="purpose">Reservation Purpose <span className="required">*</span></label>
+          <input 
+  type="text" 
+  id="purpose" 
+  name="purpose" 
+  placeholder="e.g., Study Group, Project Meeting, Exam Review..." 
+  value={formData.purpose}
+  onChange={handleChange}
+  required 
+/>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="additional-notes">Additional Notes</label>
+          <textarea 
+            id="additional-notes" 
+            name="notes" 
+            rows="3"
+            placeholder="Additional information..."
+            value={formData.notes}
+            onChange={handleChange}
+          ></textarea>
+        </div>
+        
+        <div className="form-info-box">
+          <p><strong>Note:</strong> Once submitted, an administrator will review your request. 
+          You will receive an email notification when your request is approved or rejected.</p>
+        </div>
+        
+        <button 
+          type="button" 
+          className="btn-primary" 
+          onClick={handleSubmitReservation}
+          disabled={isLoading || !formData.purpose || !formData.date || !formData.startTime || !formData.endTime}
+        >
+          {isLoading ? 'Submitting...' : isEditMode ? 'Update Reservation Request' : 'Submit Reservation Request'}
+        </button>
+      </div>
+    );
   };
 
   return (
     <div className={fullPage ? "main-content" : "reservation-form-container"}>
       {fullPage && (
-        <div className="section-header">
-          <h2>Réserver une salle d'étude</h2>
-          <p>Recherchez et réservez une salle d'étude adaptée à vos besoins</p>
-        </div>
+ <div className="section-header">
+ <h2>{isEditMode ? 'Edit Reservation' : 'Reserve a Classroom'}</h2>
+ <p>{isEditMode ? 'Modify your reservation request' : 'Search and reserve a classroom for your student activities'}</p>
+</div>
       )}
       
       {message.text && (
@@ -342,270 +822,31 @@ function StudyRoomReservation({ fullPage = false }) {
       
       <div className="view-toggle">
         <button 
-          className={`tab-button ${viewMode === 'all' ? 'active' : ''}`}
-          onClick={showAllStudyRooms}
+          className={`tab-button ${viewMode === 'all' ? 'active' : ''}`} 
+          onClick={showAllClassrooms}
         >
-          Toutes les salles d'étude
+          All Classrooms
         </button>
         <button 
-          className={`tab-button ${viewMode === 'search' ? 'active' : ''}`}
+          className={`tab-button ${viewMode === 'search' ? 'active' : ''}`} 
           onClick={showSearchForm}
         >
-          Recherche par horaire
+          Search by Criteria
         </button>
       </div>
       
       {viewMode === 'search' ? (
         <>
-          <form id="reserve-studyroom-form" onSubmit={handleSearch}>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="reservation-date">Date <span className="required">*</span></label>
-                <input 
-                  type="date" 
-                  id="reservation-date" 
-                  name="date" 
-                  value={formData.date}
-                  onChange={handleChange}
-                  required 
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="start-time">Heure de début <span className="required">*</span></label>
-                <input 
-                  type="time" 
-                  id="start-time" 
-                  name="startTime" 
-                  value={formData.startTime}
-                  onChange={handleChange}
-                  required 
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="end-time">Heure de fin <span className="required">*</span></label>
-                <input 
-                  type="time" 
-                  id="end-time" 
-                  name="endTime" 
-                  value={formData.endTime}
-                  onChange={handleChange}
-                  required 
-                />
-              </div>
-            </div>
-            
-            <button type="submit" className="btn-primary" disabled={isLoading}>
-              {isLoading ? 'Recherche en cours...' : 'Rechercher des salles d\'étude disponibles'}
-            </button>
-          </form>
-          
-          {searchPerformed && (
-            <div className="search-results-container">
-              <h3>Salles d'étude disponibles</h3>
-              
-              {searchResults.length === 0 ? (
-                <p>Aucune salle d'étude disponible ne correspond à vos critères. Veuillez modifier vos critères de recherche.</p>
-              ) : (
-                <div className="study-room-grid classroom-grid">
-                  {searchResults.map(studyRoom => (
-                    <div 
-                      key={studyRoom.id} 
-                      className={`study-room-card ${selectedStudyRoom && selectedStudyRoom.id === studyRoom.id ? 'selected' : ''}`}
-                      onClick={() => handleSelectStudyRoom(studyRoom)}
-                    >
-                      <div className="study-room-image">
-                        <img 
-                          src={studyRoom.image || '/images/study-room-default.jpg'} 
-                          alt={studyRoom.name}
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = '/images/study-room-default.jpg';
-                          }}
-                        />
-                      </div>
-                      <h4>{studyRoom.name}</h4>
-                      <p><strong>Type:</strong> {studyRoom.type}</p>
-                      <p><strong>Capacité:</strong> {studyRoom.capacity} personnes</p>
-                      {studyRoom.features && studyRoom.features.length > 0 && (
-                        <div className="features">
-                          <p><strong>Équipements:</strong></p>
-                          <ul>
-                            {studyRoom.features.map((feature, index) => (
-                              <li key={index}>{feature}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {studyRoom.availableTimes && (
-                        <p><strong>Heures d'ouverture:</strong> {studyRoom.availableTimes}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {renderSearchForm()}
+          {renderSearchResults()}
         </>
       ) : (
-        <div className="all-study-rooms-container">
-          <h3>
-            Toutes les salles d'étude disponibles
-            <button onClick={handleRefresh} className="refresh-button" disabled={isLoading}>
-              {isLoading ? 'Chargement...' : '🔄 Rafraîchir'}
-            </button>
-          </h3>
-          
-          {isLoading ? (
-            <p>Chargement des salles d'étude...</p>
-          ) : allStudyRooms.length === 0 ? (
-            <div>
-              <p>Aucune salle d'étude disponible actuellement.</p>
-              {fetchError && <p style={{color: 'red'}}>Erreur: {fetchError}</p>}
-              <button onClick={handleRefresh} className="btn-secondary">Réessayer</button>
-            </div>
-          ) : (
-            <div className="study-room-grid classroom-grid">
-              {allStudyRooms.map(studyRoom => (
-                <div 
-                  key={studyRoom.id} 
-                  className={`study-room-card ${selectedStudyRoom && selectedStudyRoom.id === studyRoom.id ? 'selected' : ''}`}
-                  onClick={() => handleSelectStudyRoom(studyRoom)}
-                >
-                  <div className="study-room-image">
-                    <img 
-                      src={studyRoom.image || '/images/study-room-default.jpg'} 
-                      alt={studyRoom.name}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = '/images/study-room-default.jpg';
-                      }}
-                    />
-                  </div>
-                  <h4>{studyRoom.name}</h4>
-                  <p><strong>Type:</strong> {studyRoom.type}</p>
-                  <p><strong>Capacité:</strong> {studyRoom.capacity} personnes</p>
-                  {studyRoom.features && studyRoom.features.length > 0 && (
-                    <div className="features">
-                      <p><strong>Équipements:</strong></p>
-                      <ul>
-                        {studyRoom.features.map((feature, index) => (
-                          <li key={index}>{feature}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {studyRoom.availableTimes && (
-                    <p><strong>Heures d'ouverture:</strong> {studyRoom.availableTimes}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        renderAllClassrooms()
       )}
       
-      {selectedStudyRoom && (
-        <div className="reservation-details-container">
-          <h3>Finaliser la réservation</h3>
-          <div className="selected-study-room-info">
-            <div className="selected-study-room-image">
-              <img 
-                src={selectedStudyRoom.image || '/images/study-room-default.jpg'} 
-                alt={selectedStudyRoom.name}
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = '/images/study-room-default.jpg';
-                }}
-              />
-            </div>
-            <h4>Salle d'étude sélectionnée: {selectedStudyRoom.name}</h4>
-            <p>Type: {selectedStudyRoom.type} | Capacité: {selectedStudyRoom.capacity} personnes</p>
-            {selectedStudyRoom.availableTimes && (
-              <p>Heures d'ouverture: {selectedStudyRoom.availableTimes}</p>
-            )}
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="reservation-date">Date <span className="required">*</span></label>
-            <input 
-              type="date" 
-              id="reservation-date" 
-              name="date" 
-              value={formData.date}
-              onChange={handleChange}
-              required 
-              min={new Date().toISOString().split('T')[0]}
-            />
-          </div>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="start-time">Heure de début <span className="required">*</span></label>
-              <input 
-                type="time" 
-                id="start-time" 
-                name="startTime" 
-                value={formData.startTime}
-                onChange={handleChange}
-                required 
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="end-time">Heure de fin <span className="required">*</span></label>
-              <input 
-                type="time" 
-                id="end-time" 
-                name="endTime" 
-                value={formData.endTime}
-                onChange={handleChange}
-                required 
-              />
-            </div>
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="purpose">Motif de la réservation <span className="required">*</span></label>
-            <input 
-              type="text" 
-              id="purpose" 
-              name="purpose" 
-              placeholder="ex: Étude en groupe, Révisions, Travail personnel..." 
-              value={formData.purpose}
-              onChange={handleChange}
-              required 
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="additional-notes">Notes supplémentaires</label>
-            <textarea 
-              id="additional-notes" 
-              name="notes" 
-              rows="3"
-              placeholder="Informations complémentaires..."
-              value={formData.notes}
-              onChange={handleChange}
-            ></textarea>
-          </div>
-          
-          <div className="form-info-box">
-            <p><strong>Note:</strong> Une fois la demande soumise, un administrateur examinera votre demande. 
-            Vous recevrez une notification par email dès que votre demande sera approuvée ou refusée.</p>
-          </div>
-          
-          <button 
-            type="button" 
-            className="btn-primary" 
-            onClick={handleSubmitReservation}
-            disabled={isLoading || !formData.purpose || !formData.date || !formData.startTime || !formData.endTime}
-          >
-            {isLoading ? 'Soumission en cours...' : 'Soumettre la demande de réservation'}
-          </button>
-        </div>
-      )}
+      {selectedClassroom && renderReservationForm()}
     </div>
   );
-}
+};
 
-export default StudyRoomReservation;
+export default RoomReservation;

@@ -8,6 +8,7 @@ import com.campusroom.security.UserDetailsImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -40,14 +42,39 @@ public class AuthService {
     @Autowired
     private EmailService emailService;
     
+    @Autowired
+    private SystemSettingsProvider settingsProvider;
+    
+    private SystemSettingsDTO currentSettings;
+    
+    @EventListener(SystemSettingsProvider.SettingsChangedEvent.class)
+    public void handleSettingsChange(SystemSettingsProvider.SettingsChangedEvent event) {
+        this.currentSettings = event.getSettings();
+        logger.info("AuthService: Settings updated");
+    }
+    
     public AuthResponse authenticateUser(LoginRequest loginRequest) {
-        try {
-            Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                    loginRequest.getEmail(), 
-                    loginRequest.getPassword()
-                )
-            );
+    try {
+        // Add this block at the start of the method before authentication
+        Optional<User> userOpt = userRepository.findByEmail(loginRequest.getEmail());
+        
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (user.getStatus() != null && user.getStatus().equals("inactive")) {
+                return AuthResponse.builder()
+                        .success(false)
+                        .message("Votre compte n'est pas activé. Veuillez contacter l'administrateur.")
+                        .build();
+            }
+        }
+        
+        // Continue with the existing code...
+        Authentication authentication = authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(
+                loginRequest.getEmail(), 
+                loginRequest.getPassword()
+            )
+        );
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             
@@ -93,11 +120,16 @@ public class AuthService {
     public AuthResponse registerUser(RegisterRequest registerRequest) {
         logger.info("Registering user: {}", registerRequest.getEmail());
         
+        // Ensure settings are loaded
+        if (currentSettings == null) {
+            currentSettings = settingsProvider.getSettings();
+        }
+        
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
             logger.info("User already exists with email: {}", registerRequest.getEmail());
             return AuthResponse.builder()
                     .success(false)
-                    .message("Un utilisateur avec cet email existe déjà")
+                    .message("A user with this email already exists")
                     .build();
         }
         
@@ -112,12 +144,22 @@ public class AuthService {
             logger.info("Role received: {}", roleStr);
             
             try {
-                user.setRole(User.Role.valueOf(roleStr));
+                User.Role userRole = User.Role.valueOf(roleStr);
+                user.setRole(userRole);
+                
+                // Auto-approve based on settings
+                if ((userRole == User.Role.ADMIN && currentSettings.isAutoApproveAdmin()) ||
+                    (userRole == User.Role.PROFESSOR && currentSettings.isAutoApproveProfessor()) ||
+                    (userRole == User.Role.STUDENT && currentSettings.isAutoApproveStudent())) {
+                    user.setStatus("active");
+                } else {
+                    user.setStatus("inactive"); // Needs admin approval
+                }
             } catch (IllegalArgumentException e) {
                 logger.error("Invalid role: {}", roleStr);
                 return AuthResponse.builder()
                         .success(false)
-                        .message("Rôle invalide: " + registerRequest.getRole())
+                        .message("Invalid role: " + registerRequest.getRole())
                         .build();
             }
             
@@ -125,19 +167,31 @@ public class AuthService {
             userRepository.save(user);
             logger.info("User saved successfully!");
             
+            // Send notification email to admins if enabled
+            if (currentSettings.isEmailNotifications() && 
+                currentSettings.isNewUserRegistered()) {
+                notifyAdminsAboutNewUser(user);
+            }
+            
             return AuthResponse.builder()
                     .success(true)
-                    .message("Utilisateur enregistré avec succès")
+                    .message("User registered successfully")
                     .build();
         } catch (Exception e) {
             logger.error("Error registering user: {}", e.getMessage(), e);
             return AuthResponse.builder()
                     .success(false)
-                    .message("Une erreur est survenue lors de l'inscription: " + e.getMessage())
+                    .message("An error occurred during registration: " + e.getMessage())
                     .build();
         }
     }
-
+    
+    /**
+     * Notify admins about new user registration
+     */
+    private void notifyAdminsAboutNewUser(User newUser) {
+        // Implementation to email admins about new user
+    }
     @Transactional
     public AuthResponse forgotPassword(ForgotPasswordRequest request) {
         return userRepository.findByEmail(request.getEmail())
@@ -252,4 +306,28 @@ public class AuthService {
                     .build();
         }
     }
+    
+    @Transactional
+public AuthResponse changeUserStatus(Long userId, String status) {
+    return userRepository.findById(userId)
+            .map(user -> {
+                user.setStatus(status);
+                userRepository.save(user);
+                
+                String message = status.equals("active") 
+                    ? "L'utilisateur a été activé avec succès" 
+                    : "L'utilisateur a été désactivé avec succès";
+                
+                return AuthResponse.builder()
+                        .success(true)
+                        .message(message)
+                        .build();
+            })
+            .orElse(AuthResponse.builder()
+                    .success(false)
+                    .message("Utilisateur non trouvé")
+                    .build());
+}
+    
+    
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { API } from '../../api';
 import Table from '../common/Table';
 import Modal from '../common/Modal';
 import '../../styles/dashboard.css';
@@ -9,19 +10,40 @@ const ProfessorReservations = () => {
   const [myReservations, setMyReservations] = useState([]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   
-  // Load reservations from localStorage on component mount
+  // Load reservations from API and fallback to localStorage
   useEffect(() => {
-    const loadReservations = () => {
-      const storedReservations = localStorage.getItem('professorReservations');
-      if (storedReservations) {
-        const reservations = JSON.parse(storedReservations);
-        // Filter for current user if needed
-        const userReservations = currentUser 
-          ? reservations.filter(r => r.userId === currentUser.email)
-          : reservations;
+    const loadReservations = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Try to fetch from API first
+        const response = await API.professorAPI.getMyReservations();
+        console.log('API response:', response.data);
+        setMyReservations(response.data);
         
-        setMyReservations(userReservations);
+        // Update localStorage with fresh data
+        localStorage.setItem('professorReservations', JSON.stringify(response.data));
+      } catch (err) {
+        console.error('Error fetching reservations from API:', err);
+        setError('Could not load reservations from server. Using local data.');
+        
+        // Fallback to localStorage
+        const storedReservations = localStorage.getItem('professorReservations');
+        if (storedReservations) {
+          const reservations = JSON.parse(storedReservations);
+          // Filter for current user if needed
+          const userReservations = currentUser 
+            ? reservations.filter(r => r.userId === currentUser.email)
+            : reservations;
+          
+          setMyReservations(userReservations);
+        }
+      } finally {
+        setLoading(false);
       }
     };
     
@@ -35,18 +57,30 @@ const ProfessorReservations = () => {
   };
   
   // Handle cancel reservation
-  const handleCancelReservation = (id) => {
+  const handleCancelReservation = async (id) => {
     if (window.confirm('Are you sure you want to cancel this reservation?')) {
-      // Filter out the cancelled reservation
-      const updatedReservations = myReservations.filter(r => r.id !== id);
-      setMyReservations(updatedReservations);
-      
-      // Update localStorage
-      const allReservations = JSON.parse(localStorage.getItem('professorReservations') || '[]');
-      const filteredReservations = allReservations.filter(r => r.id !== id);
-      localStorage.setItem('professorReservations', JSON.stringify(filteredReservations));
-      
-      alert('Reservation cancelled successfully.');
+      try {
+        // Call API to cancel reservation
+        await API.professorAPI.cancelReservation(id);
+        
+        // Update local state - mark as cancelled instead of removing
+        const updatedReservations = myReservations.map(r => 
+          r.id === id ? { ...r, status: 'CANCELLED' } : r
+        );
+        setMyReservations(updatedReservations);
+        
+        // Update localStorage
+        const allReservations = JSON.parse(localStorage.getItem('professorReservations') || '[]');
+        const updatedAllReservations = allReservations.map(r => 
+          r.id === id ? { ...r, status: 'CANCELLED' } : r
+        );
+        localStorage.setItem('professorReservations', JSON.stringify(updatedAllReservations));
+        
+        alert('Reservation cancelled successfully.');
+      } catch (err) {
+        console.error('Error cancelling reservation:', err);
+        alert('Failed to cancel reservation. Please try again.');
+      }
     }
   };
   
@@ -54,7 +88,11 @@ const ProfessorReservations = () => {
   const columns = [
     { header: 'Classroom', key: 'classroom' },
     { header: 'Date', key: 'date' },
-    { header: 'Time', key: 'time' },
+    { 
+      header: 'Time', 
+      key: 'time',
+      render: (time, reservation) => time || `${reservation.startTime} - ${reservation.endTime}`
+    },
     { header: 'Purpose', key: 'purpose' },
     { 
       header: 'Status', 
@@ -76,12 +114,14 @@ const ProfessorReservations = () => {
           >
             View
           </button>
-          <button 
-            className="btn-table btn-delete"
-            onClick={() => handleCancelReservation(id)}
-          >
-            Cancel
-          </button>
+          {reservation.status !== 'CANCELLED' && (
+            <button 
+              className="btn-table btn-delete"
+              onClick={() => handleCancelReservation(id)}
+            >
+              Cancel
+            </button>
+          )}
         </div>
       )
     }
@@ -94,11 +134,20 @@ const ProfessorReservations = () => {
           <h2>My Reservations</h2>
         </div>
         
-        <Table 
-          columns={columns}
-          data={myReservations}
-          emptyMessage="You don't have any reservations yet"
-        />
+        {error && <div className="alert alert-danger">{error}</div>}
+        
+        {loading ? (
+          <div className="loading-spinner">
+            <i className="fas fa-spinner fa-spin"></i>
+            <p>Loading reservations...</p>
+          </div>
+        ) : (
+          <Table 
+            columns={columns}
+            data={myReservations}
+            emptyMessage="You don't have any reservations yet"
+          />
+        )}
       </div>
       
       {/* Reservation Detail Modal */}
@@ -123,7 +172,7 @@ const ProfessorReservations = () => {
             </div>
             <div className="detail-item">
               <span className="detail-label">Time</span>
-              <span className="detail-value">{selectedReservation.time}</span>
+              <span className="detail-value">{selectedReservation.time || `${selectedReservation.startTime} - ${selectedReservation.endTime}`}</span>
             </div>
             <div className="detail-item">
               <span className="detail-label">Purpose</span>
@@ -138,13 +187,13 @@ const ProfessorReservations = () => {
               </span>
             </div>
             
-            {selectedReservation.status === 'Pending' && (
+            {(selectedReservation.status === 'Pending' || selectedReservation.status === 'PENDING') && (
               <div className="detail-note">
                 <p>This reservation is waiting for approval from the administrator.</p>
               </div>
             )}
             
-            {selectedReservation.status === 'Approved' && (
+            {(selectedReservation.status === 'Approved' || selectedReservation.status === 'APPROVED') && (
               <div className="detail-instructions">
                 <h4>Instructions:</h4>
                 <ol>
@@ -157,7 +206,7 @@ const ProfessorReservations = () => {
             )}
             
             <div className="modal-actions">
-              {selectedReservation.status !== 'Cancelled' && (
+              {selectedReservation.status !== 'CANCELLED' && (
                 <button 
                   className="btn-danger"
                   onClick={() => {

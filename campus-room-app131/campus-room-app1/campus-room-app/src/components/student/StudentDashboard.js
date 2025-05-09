@@ -3,12 +3,14 @@ import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import RoomReservation from './RoomReservation';
 import StudentMyReservations from './StudentMyReservations';
-import ClassSchedule from './ClassSchedule';
 import Profile from '../common/Profile';
+import NotificationPanel from '../common/NotificationPanel';
+import NotificationService from '../../services/NotificationService';
 
 import StudentTimetable from './StudentTimetable';
 
 import '../../styles/dashboard.css';
+import '../../styles/notifications.css';
 
 // Component imports
 import SideNav from '../common/SideNav';
@@ -20,6 +22,8 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   
   // Mock data - in a real app, these would come from an API
   const [myReservations, setMyReservations] = useState([
@@ -104,7 +108,45 @@ const StudentDashboard = () => {
       // Save initial reservations if none in localStorage
       localStorage.setItem('studentReservations', JSON.stringify(myReservations));
     }
+
+    // Fetch notification count
+    fetchNotificationCount();
+
+    // Set up interval to refresh notification count periodically
+    const interval = setInterval(fetchNotificationCount, 60000); // every minute
+    
+    return () => clearInterval(interval);
   }, []);
+
+  // Fetch notification count
+  const fetchNotificationCount = async () => {
+    try {
+      const count = await NotificationService.getUnreadCount();
+      setNotificationCount(count);
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+    }
+  };
+
+  // Toggle notifications panel
+  const toggleNotifications = () => {
+    setShowNotifications(!showNotifications);
+    
+    // If opening notifications, mark them as read
+    if (!showNotifications) {
+      markNotificationsAsRead();
+    }
+  };
+  
+  // Mark notifications as read
+  const markNotificationsAsRead = async () => {
+    try {
+      await NotificationService.markAllAsRead();
+      setNotificationCount(0);
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
 
   // Save reservations to localStorage when they change
   useEffect(() => {
@@ -360,7 +402,7 @@ const StudentDashboard = () => {
               <div className="room-details">
                 <h3>{room.name}</h3>
                 <p><i className="fas fa-users"></i> Capacity: {room.capacity} people</p>
-                <p><i className="fas fa-list"></i> Features: {room.features.join(', ')}</p>
+                <p><i className="fas fa-list"></i> Features: {Array.isArray(room.features) ? room.features.join(', ') : room.features}</p>
                 <p><i className="fas fa-clock"></i> Available: {room.availableTimes}</p>
               </div>
               <button 
@@ -381,7 +423,6 @@ const StudentDashboard = () => {
     { to: '/student', icon: 'fas fa-tachometer-alt', text: 'Dashboard', exact: true },
     { to: '/student/reserve', icon: 'fas fa-calendar-plus', text: 'Reserve Study Room' },
     { to: '/student/reservations', icon: 'fas fa-calendar-check', text: 'My Reservations' },
-    { to: '/student/schedule', icon: 'fas fa-calendar-alt', text: 'Class Schedule' },
     { to: '/student/timetable', icon: 'fas fa-calendar-week', text: 'Emploi du temps', exact: false },
     { to: '/student/profile', icon: 'fas fa-user', text: 'Profile' }
   ];
@@ -395,22 +436,43 @@ const StudentDashboard = () => {
         onLogout={handleLogout}
         currentUser={currentUser}
         userRole="Student"
+        notificationCount={notificationCount}
       />
       
       <div className="content-wrapper">
         <div className="header">
           <h1>Student Dashboard</h1>
-          <div className="user-info">
-            <span className="role-badge">Student</span>
-            <span>{currentUser?.firstName} {currentUser?.lastName}</span>
+          <div className="header-actions">
+            <div className="notification-bell-wrapper">
+              <button 
+                className="btn-notification" 
+                onClick={toggleNotifications}
+                title="View notifications"
+              >
+                <i className="fas fa-bell"></i>
+                {notificationCount > 0 && (
+                  <span className="notification-count">{notificationCount}</span>
+                )}
+              </button>
+            </div>
+            <div className="user-info">
+              <span className="role-badge">Student</span>
+              <span>{currentUser?.firstName} {currentUser?.lastName}</span>
+            </div>
           </div>
         </div>
+        
+        {/* Notifications Panel */}
+        {showNotifications && (
+          <div className="notifications-container">
+            <NotificationPanel userRole="student" />
+          </div>
+        )}
         
         <Routes>
           <Route path="/" element={<DashboardHome />} />
           <Route path="/reserve" element={<RoomReservation rooms={studyRooms} onReserve={openReservationModal} />} />
           <Route path="/reservations" element={<StudentMyReservations />} />
-          <Route path="/schedule" element={<ClassSchedule classes={todayClasses} />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/timetable" element={<StudentTimetable />} />
           {/* Add more routes as needed */}

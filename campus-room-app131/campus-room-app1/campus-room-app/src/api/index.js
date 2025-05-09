@@ -3,349 +3,562 @@ import axios from 'axios';
 
 // Configure base URL for API requests
 const API = axios.create({
-  baseURL: '/api'
+  baseURL: '/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  // Enable CORS credentials
+  withCredentials: true
 });
 
-// Add request interceptor to include auth token in every request
-API.interceptors.request.use((req) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    req.headers.Authorization = `Bearer ${token}`;
-  }
-  return req;
-});
+console.log('API baseURL configured as:', API.defaults.baseURL);
 
-// Add response interceptor to handle common errors
+// Add a response interceptor to handle token expiration
 API.interceptors.response.use(
-  response => response,
-  error => {
-    // Handle token expiration - MODIFIED: Only redirect if it's truly an auth issue
-    if (error.response && error.response.status === 401) {
-      // Check if we're already on the login page to prevent redirect loops
-      if (window.location.pathname !== '/') {
-        console.log('Authentication required - redirecting to login page');
-        
-        // Clear authentication data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        
-        // Use a timeout to allow the current operation to complete
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 100);
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // If error is 401 Unauthorized and not already retrying
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      console.log("Authentication error detected - token expired or invalid");
+      
+      // Mark as retried to prevent infinite loops
+      originalRequest._retry = true;
+      
+      // Check if it's a token validation error
+      const isTokenError = error.response.data && 
+                          (error.response.data.error === 'invalid_token' || 
+                           error.response.data.message?.toLowerCase().includes('token') ||
+                           error.response.data.message?.toLowerCase().includes('unauthorized'));
+      
+      // Clear authentication
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Add a timestamp to prevent immediate relogin issues
+      sessionStorage.setItem('auth_error_timestamp', Date.now().toString());
+      
+      // Create enhanced error with more detailed information
+      return Promise.reject({
+        ...error,
+        isAuthError: true,
+        errorType: isTokenError ? 'token_error' : 'unauthorized',
+        message: isTokenError 
+          ? "Your authentication token has expired or is invalid. Please log in again." 
+          : "Your session has expired. Please log in again.",
+        timestamp: Date.now()
+      });
+    }
+    // Handle network errors that might also be related to auth
+    if (!error.response && error.request) {
+      console.log("Network error detected - could be connectivity issue or server down");
+      
+      // Check if we have a token but getting network errors
+      // This could indicate a server issue or blocked requests
+      const token = localStorage.getItem('token');
+      if (token) {
+        console.log("Network error with existing token - could be server unavailable");
       }
     }
-    
-    // Log detailed error information for debugging
-    console.error('API Error:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data
-    });
     
     return Promise.reject(error);
   }
 );
 
-// Debug info - log API object structure to console
+// Add request interceptor to add JWT token to requests
+API.interceptors.request.use(
+  (config) => {
+    // Get and validate token
+    const token = localStorage.getItem('token');
+    const isTokenValid = validateToken(token);
+    
+    console.log('Request to:', config.url, '- Token exists:', !!token, '- Token valid:', isTokenValid);
+    
+    if (token && isTokenValid) {
+      // Add token to Authorization header
+      config.headers['Authorization'] = `Bearer ${token}`;
+      
+      // Add request timestamp for potential request timeout detection
+      config.metadata = { startTime: new Date().getTime() };
+    } else if (token && !isTokenValid) {
+      // If token exists but is invalid, remove it
+      console.log('Invalid token detected, removing from localStorage');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    
+    // Don't override Content-Type if it's multipart/form-data
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Basic token validation function
+function validateToken(token) {
+  if (!token) return false;
+  
+  try {
+    // Check if token has valid JWT format (header.payload.signature)
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) return false;
+    
+    // Decode the middle part (payload)
+    const payload = JSON.parse(atob(tokenParts[1]));
+    
+    // Check if token is expired
+    const expiryTime = payload.exp * 1000; // Convert to milliseconds
+    const currentTime = Date.now();
+    
+    if (expiryTime < currentTime) {
+      console.log('Token expired at:', new Date(expiryTime).toISOString());
+      console.log('Current time:', new Date(currentTime).toISOString());
+      return false;
+    }
+    
+    return true;
+  } catch (e) {
+    console.error('Error validating token:', e);
+    return false;
+  }
+}
+
+// Add response time tracking to all requests
+API.interceptors.response.use(
+  (response) => {
+    // Calculate request duration if metadata exists
+    if (response.config.metadata) {
+      const endTime = new Date().getTime();
+      const duration = endTime - response.config.metadata.startTime;
+      console.log(`Request to ${response.config.url} took ${duration}ms`);
+      
+      // Warning for slow requests
+      if (duration > 5000) {
+        console.warn(`Slow request detected: ${response.config.url} took ${duration}ms`);
+      }
+    }
+    return response;
+  }
+);
+
+// Debug info
 console.log('API module loading correctly');
 
-// Add API services directly to the API object
-API.authAPI = {
-  login: (email, password, rememberMe = false) => {
-    return API.post('/auth/login', { email, password, rememberMe });
-  },
-  
-  register: (userData) => {
-    return API.post('/auth/register', userData);
-  },
-  
-  forgotPassword: (email) => {
-    return API.post('/auth/forgot-password', { email });
-  },
-  
-  resetPassword: (token, password, confirmPassword) => {
-    return API.post('/auth/reset-password', {
-      token,
-      password,
-      confirmPassword
-    });
-  },
-  
-  // Added method for token validation
-  validateToken: () => {
-    return API.get('/auth/validate-token');
-  }
-};
-
-// Room API Services
-API.roomAPI = {
-  getAllClassrooms: () => {
-    return API.get('/classrooms'); 
-  },
-  getClassroomById: (id) => {
-    return API.get(`/rooms/classrooms/${id}`);
-  },
-  createClassroom: (classroomData) => {
-    return API.post('/rooms/classrooms', classroomData);
-  },
-  updateClassroom: (id, classroomData) => {
-    return API.put(`/rooms/classrooms/${id}`, classroomData);
-  },
-  deleteClassroom: (id) => {
-    return API.delete(`/rooms/classrooms/${id}`);
-  },
-  getAllStudyRooms: () => {
-    return API.get('/rooms/study-rooms');
-  },
-  getStudyRoomById: (id) => {
-    return API.get(`/rooms/study-rooms/${id}`);
-  },
-  createStudyRoom: (studyRoomData) => {
-    return API.post('/rooms/study-rooms', studyRoomData);
-  },
-  updateStudyRoom: (id, studyRoomData) => {
-    return API.put(`/rooms/study-rooms/${id}`, studyRoomData);
-  },
-  deleteStudyRoom: (id) => {
-    return API.delete(`/rooms/study-rooms/${id}`);
-  },
-  searchAvailableRooms: (searchCriteria) => {
-    return API.get('/rooms/search', { params: searchCriteria });
-  },
-  checkClassroomAvailability: (id, date) => {
-    return API.get(`/rooms/classrooms/${id}/availability`, { params: { date } });
-  },
-  getAvailableTimeSlots: (id, date) => {
-    return API.get(`/rooms/classrooms/${id}/available-times`, { params: { date } });
-  },
-  isRoomAvailable: (id, date, startTime, endTime) => {
-    return API.get(`/rooms/classrooms/${id}/check`, { 
-      params: { date, startTime, endTime } 
-    });
-  },
-  checkStudyRoomAvailability: (id, date) => {
-    return API.get(`/rooms/study-rooms/${id}/availability`, { params: { date } });
-  },
-  getStudyRoomAvailableTimeSlots: (id, date) => {
-    return API.get(`/rooms/study-rooms/${id}/available-times`, { params: { date } });
-  },
-  isStudyRoomAvailable: (id, date, startTime, endTime) => {
-    return API.get(`/rooms/study-rooms/${id}/check`, { 
-      params: { date, startTime, endTime } 
-    });
-  },
-  searchAvailableStudyRooms: (searchCriteria) => {
-    return API.get('/rooms/study-rooms/search', { params: searchCriteria });
-  }
-};
-
-// Student API Services - Explicitly define all methods
-API.studentAPI = {
-  getStudyRooms: () => {
-    // Added fallback to public endpoint if authentication fails
-    return API.get('/student/study-rooms')
+// FIX: Correct profileAPI implementation
+API.profileAPI = {
+  getUserProfile: () => {
+    // Check token before even attempting the request
+    if (!localStorage.getItem('token')) {
+      return Promise.reject({
+        isAuthError: true,
+        message: "No authentication token found. Please log in."
+      });
+    }
+    
+    // FIXED: Use the correct path WITHOUT duplicate /api prefix
+    return API.get('/profile')
       .catch(error => {
-        console.log('Falling back to public study rooms endpoint');
-        return API.get('/rooms/public-studyrooms');
+        // Don't retry if it's an auth error
+        if (error.isAuthError) {
+          return Promise.reject(error);
+        }
+        
+        console.log('First profile endpoint failed, trying alternatives...', error);
+        
+        // Try alternative endpoint paths
+        return API.get('/users/profile')
+          .catch(error2 => {
+            // Don't retry if it's an auth error
+            if (error2.isAuthError) {
+              return Promise.reject(error2);
+            }
+            
+            console.log('Second profile endpoint failed, trying a third option...');
+            
+            // Try direct axios call as a last resort
+            return API.get('/api/profile')
+              .catch(error3 => {
+                console.log('All profile endpoints failed:', error3);
+                return Promise.reject(error3);
+              });
+          });
       });
   },
-  requestStudyRoomReservation: (roomId, reservationData) => {
-    const requestData = {
-      roomId,
-      ...reservationData
-    };
-    return API.post('/student/study-room-reservations', requestData);
+  
+  updateProfile: (profileData) => {
+    // Check token before attempting the request
+    if (!localStorage.getItem('token')) {
+      return Promise.reject({
+        isAuthError: true,
+        message: "No authentication token found. Please log in."
+      });
+    }
+    
+    // FIXED: Use the correct path WITHOUT duplicate /api prefix
+    return API.put('/profile', profileData)
+      .catch(error => {
+        if (error.isAuthError) {
+          return Promise.reject(error);
+        }
+        
+        console.log('Falling back to alternative profile update endpoint');
+        return API.put('/users/profile', profileData);
+      });
   },
-  getMyReservations: () => {
-    return API.get('/student/my-reservations');
+  
+  changePassword: (passwordData) => {
+    // Check token before attempting the request
+    if (!localStorage.getItem('token')) {
+      return Promise.reject({
+        isAuthError: true,
+        message: "No authentication token found. Please log in."
+      });
+    }
+    
+    // FIXED: Use the correct path WITHOUT duplicate /api prefix
+    return API.put('/profile/password', passwordData)
+      .catch(error => {
+        if (error.isAuthError) {
+          return Promise.reject(error);
+        }
+        
+        console.log('Falling back to alternative password change endpoint');
+        return API.put('/users/change-password', passwordData);
+      });
   },
-  cancelReservation: (reservationId) => {
-    return API.put(`/student/reservations/${reservationId}/cancel`);
-  },
-  checkStudyRoomAvailability: (id, date) => {
-    return API.get(`/student/study-rooms/${id}/availability`, { params: { date } });
-  },
-  getStudyRoomAvailableTimeSlots: (id, date) => {
-    return API.get(`/student/study-rooms/${id}/available-times`, { params: { date } });
-  },
-  searchAvailableStudyRooms: (criteria) => {
-    return API.post('/student/study-rooms/search', criteria);
-  },
-  getStudyRoomUsageStats: () => {
-    return API.get('/student/study-room-usage-stats');
+  
+  getUserInfo: () => {
+    // Check token before attempting the request
+    if (!localStorage.getItem('token')) {
+      return Promise.reject({
+        isAuthError: true,
+        message: "No authentication token found. Please log in."
+      });
+    }
+    
+    // FIXED: Use the correct path WITHOUT duplicate /api prefix
+    return API.get('/profile/user-info')
+      .catch(error => {
+        if (error.isAuthError) {
+          return Promise.reject(error);
+        }
+        
+        console.log('Falling back to alternative user info endpoint');
+        return API.get('/users/profile/info');
+      });
   }
 };
 
-// Professor API Services
-API.professorAPI = {
-  getMyReservations: () => {
-    return API.get('/professor/reservations');
-  },
-  searchAvailableClassrooms: (criteria) => {
-    return API.post('/professor/reservations/search', criteria);
-  },
-  requestReservation: (reservationData) => {
-    return API.post('/professor/reservations/request', reservationData);
-  },
-  cancelReservation: (id) => {
-    return API.put(`/professor/reservations/${id}/cancel`);
-  }
-};
-
-// Reservation API Services
-API.reservationAPI = {
-  getAllReservations: () => {
-    return API.get('/reservations');
-  },
-  getReservationsByStatus: (status) => {
-    return API.get(`/reservations/status/${status}`);
-  },
-  getPendingDemands: (filters = {}) => {
-    return API.get('/reservations/pending', { params: filters });
-  },
-  approveReservation: (id) => {
-    return API.put(`/reservations/${id}/approve`);
-  },
-  rejectReservation: (id, reason) => {
-    return API.put(`/reservations/${id}/reject`, { reason });
-  },
-  cancelReservation: (id) => {
-    return API.put(`/reservations/${id}/cancel`);
-  },
-  getStudyRoomReservations: () => {
-    return API.get('/reservations/study-rooms');
-  },
-  getStudyRoomReservationsByStatus: (status) => {
-    return API.get(`/reservations/study-rooms/status/${status}`);
-  }
-};
-
-// Notification API Services
-API.notificationAPI = {
-  getAllNotifications: () => {
-    return API.get('/notifications');
-  },
-  getUnreadNotifications: () => {
-    return API.get('/notifications/unread');
-  },
-  getUnreadCount: () => {
-    return API.get('/notifications/count');
-  },
-  markAsRead: (id) => {
-    return API.put(`/notifications/${id}/read`);
-  },
-  markAllAsRead: () => {
-    return API.put('/notifications/read-all');
-  }
-};
-
-// Admin API Services
-API.adminAPI = {
-  getDashboardStats: () => {
-    return API.get('/admin/dashboard/stats');
-  },
-  getNotifications: () => {
-    return API.get('/admin/dashboard/notifications');
-  },
-  getRecentReservations: () => {
-    return API.get('/admin/dashboard/recent-reservations');
-  },
-  getPendingDemands: () => {
-    return API.get('/admin/dashboard/pending-demands');
-  },
-  getReportsData: () => {
-    return API.get('/admin/reports');
-  },
-  approveReservation: (id) => {
-    return API.put(`/admin/approve-reservation/${id}`);
-  },
-  rejectReservation: (id, reason) => {
-    return API.put(`/admin/reject-reservation/${id}`, { reason });
-  },
-  getUserNotifications: (userId) => {
-    return API.get(`/admin/user-notifications/${userId}`);
-  },
-  getStudyRoomStats: () => {
-    return API.get('/admin/study-room-stats');
-  },
-  getStudyRoomUsage: () => {
-    return API.get('/admin/study-room-usage');
-  },
-  getStudyRoomReservations: () => {
-    return API.get('/admin/study-room-reservations');
-  }
-};
-
-// User API Services
+// Add this after the profileAPI implementation around line 216
 API.userAPI = {
+  // Get all users
   getAllUsers: () => {
     return API.get('/users');
   },
+  
+  // Get user by ID
   getUserById: (id) => {
     return API.get(`/users/${id}`);
   },
-  getUserProfile: () => {
-    return API.get('/users/profile');
+  
+  // Toggle user status (activate/deactivate)
+  toggleUserStatus: (userId, status) => {
+    return API.put(`/users/${userId}/status`, { status });
   },
-  updateUserProfile: (userData) => {
-    return API.put('/users/profile', userData);
+  
+  // Other user methods you might need
+  updateUser: (id, userData) => {
+    return API.put(`/users/${id}`, userData);
   },
-  changePassword: (passwordData) => {
-    return API.put('/users/change-password', passwordData);
+  
+  deleteUser: (id) => {
+    return API.delete(`/users/${id}`);
   },
+  
+  // Get users by role
   getUsersByRole: (role) => {
     return API.get(`/users/role/${role}`);
   }
 };
 
-// Settings API Services
-API.settingsAPI = {
-  getSystemSettings: () => {
-    return API.get('/settings');
-  },
-  updateSystemSettings: (settingsData) => {
-    return API.put('/settings', settingsData);
-  },
-  getStudyRoomSettings: () => {
-    return API.get('/settings/study-rooms');
-  },
-  updateStudyRoomSettings: (settingsData) => {
-    return API.put('/settings/study-rooms', settingsData);
-  }
-};
-
-// Email Notification API Services
-API.emailAPI = {
-  sendReservationStatusNotification: (reservationId, status, reason) => {
-    return API.post('/notifications/reservation-status', {
-      reservationId,
-      status,
-      reason: reason || ''
+// File upload API calls
+API.fileAPI = {
+  // Upload profile with image
+  uploadProfileWithImage: (formData) => {
+    return API.post('/profile/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     });
   },
-  sendNewReservationNotification: (reservationData) => {
-    return API.post('/notifications/new-reservation', {
-      reservationData
+  
+  // Upload any image file
+  uploadImage: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    return API.post('/uploads/images', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     });
   }
 };
 
-// Public endpoints without authentication requirements
-API.publicAPI = {
+// FIX: Update timetableAPI to remove duplicate /api prefix
+API.timetableAPI = {
+  getMyTimetable: () => {
+    // FIXED: Removed duplicate /api prefix
+    return API.get('/timetable/my-timetable');
+  },
+  // Other timetable methods would be fixed similarly
+  
+  // Export timetable to various formats
+  exportTimetable: (format = 'ics') => {
+    return API.get('/timetable/my-timetable/export', { 
+      params: { format },
+      responseType: 'blob' 
+    });
+  }
+};
+
+// Reports API calls
+API.reportsAPI = {
+  // Get comprehensive report data
+  getReportsData: () => {
+    return API.get('/admin/reports');
+  },
+  
+  // Get dashboard statistics
+  getDashboardStats: () => {
+    return API.get('/admin/dashboard/stats');
+  },
+  
+  // Get CSV report data
+  getCSVReport: () => {
+    return API.get('/admin/reports/csv', { 
+      responseType: 'blob'
+    });
+  },
+  
+  // Get Excel report data
+  getExcelReport: () => {
+    return API.get('/admin/reports/excel', { 
+      responseType: 'blob'
+    });
+  },
+  
+  // Get PDF report
+  getPDFReport: () => {
+    return API.get('/admin/reports/pdf', { 
+      responseType: 'blob'
+    });
+  },
+  
+  // Get popular rooms data
+  getPopularRooms: () => {
+    return API.get('/admin/reports/popular-rooms');
+  },
+  
+  // Get active users data
+  getActiveUsers: () => {
+    return API.get('/admin/reports/active-users');
+  },
+  
+  // Get monthly activity data
+  getMonthlyActivity: () => {
+    return API.get('/admin/reports/monthly-activity');
+  },
+};
+
+// Class Group API calls - FIXED: Removed duplicate /api prefixes
+API.classGroupAPI = {
+  // Get all class groups
+  getAllClassGroups: () => {
+    return API.get('/class-groups');
+  },
+  
+  // Get a specific class group by ID
+  getClassGroupById: (id) => {
+    return API.get(`/class-groups/${id}`);
+  },
+  
+  // Get class groups for a specific professor
+  getClassGroupsByProfessor: (professorId) => {
+    return API.get(`/class-groups/professor/${professorId}`);
+  },
+  
+  // Get class groups for a specific student
+  getClassGroupsByStudent: (studentId) => {
+    return API.get(`/class-groups/student/${studentId}`);
+  },
+  
+  // Create a new class group
+  createClassGroup: (classGroupData) => {
+    return API.post('/class-groups', classGroupData);
+  },
+  
+  // Update a class group
+  updateClassGroup: (id, classGroupData) => {
+    return API.put(`/class-groups/${id}`, classGroupData);
+  },
+  
+  // Delete a class group
+  deleteClassGroup: (id) => {
+    return API.delete(`/class-groups/${id}`);
+  },
+  
+  // Add a student to a class group
+  addStudentToClass: (classGroupId, studentId) => {
+    return API.post(`/class-groups/${classGroupId}/students/${studentId}`);
+  },
+  
+  // Remove a student from a class group
+  removeStudentFromClass: (classGroupId, studentId) => {
+    return API.delete(`/class-groups/${classGroupId}/students/${studentId}`);
+  },
+  
+  // Update the timetable for a class group
+  updateClassGroupTimetable: (classGroupId, timetableEntries) => {
+    return API.put(`/class-groups/${classGroupId}/timetable`, timetableEntries);
+  },
+  
+  // Get the timetable for a student based on their class groups
+  getStudentTimetable: (studentId) => {
+    return API.get(`/class-groups/student/${studentId}/timetable`);
+  },
+  
+  // Get available students who aren't in a specific class group
+  getAvailableStudents: (classGroupId) => {
+    return API.get(`/class-groups/${classGroupId}/available-students`);
+  }
+};
+
+// Student API Implementation with robust fallback mechanisms
+API.studentAPI = {
+  // Get all study rooms
   getStudyRooms: () => {
-    return axios.get('/api/rooms/public-studyrooms');
+    console.log('Fetching study rooms...');
+    return API.get('/student/study-rooms')
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.get('/api/student/study-rooms')
+          .catch(secondErr => {
+            console.log('Trying rooms API endpoint');
+            return API.get('/rooms/study-rooms');
+          });
+      });
   },
-  getPublicRoomInfo: () => {
-    return axios.get('/api/public/rooms');
+  
+  // Request a study room reservation
+  requestStudyRoomReservation: (requestData) => {
+    console.log('Requesting study room reservation:', requestData);
+    return API.post('/student/study-room-reservations', requestData)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.post('/api/student/study-room-reservations', requestData)
+          .catch(secondErr => {
+            console.log('Trying general reservations endpoint');
+            // Notice we're using /reservations/request without /api prefix because API.post already adds it
+            return API.post('/reservations/request', requestData);
+          });
+      });
+  },
+  
+  // Update a study room reservation
+  updateStudyRoomReservation: (id, requestData) => {
+    console.log('Updating study room reservation:', id);
+    return API.put(`/student/study-room-reservations/${id}`, requestData)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.put(`/api/student/study-room-reservations/${id}`, requestData)
+          .catch(secondErr => {
+            console.log('Trying general reservations endpoint');
+            return API.put(`/reservations/${id}`, requestData);
+          });
+      });
+  },
+  
+  // Get student's reservations
+  getMyReservations: () => {
+    console.log('Fetching my reservations...');
+    return API.get('/student/my-reservations')
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.get('/api/student/my-reservations')
+          .catch(secondErr => {
+            console.log('Trying general my-reservations endpoint');
+            return API.get('/reservations/my');
+          });
+      });
+  },
+  
+  // Cancel a reservation
+  cancelReservation: (id) => {
+    console.log('Cancelling reservation:', id);
+    return API.put(`/student/reservations/${id}/cancel`)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.put(`/api/student/reservations/${id}/cancel`)
+          .catch(secondErr => {
+            console.log('Trying general cancellation endpoint');
+            return API.put(`/reservations/${id}/cancel`);
+          });
+      });
+  },
+  
+  // Search available study rooms
+  searchAvailableStudyRooms: (criteria) => {
+    console.log('Searching available study rooms with criteria:', criteria);
+    return API.post('/student/study-rooms/search', criteria)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.post('/api/student/study-rooms/search', criteria)
+          .catch(secondErr => {
+            console.log('Trying general search endpoint');
+            return API.post('/rooms/search', criteria);
+          });
+      });
+  },
+  
+  // Get study room by ID
+  getStudyRoomById: (id) => {
+    console.log('Fetching study room by ID:', id);
+    return API.get(`/student/study-rooms/${id}`)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.get(`/api/student/study-rooms/${id}`)
+          .catch(secondErr => {
+            console.log('Trying general rooms endpoint');
+            return API.get(`/rooms/study-rooms/${id}`);
+          });
+      });
+  },
+  
+  // Get student's timetable
+  getMyTimetable: () => {
+    console.log('Fetching my timetable...');
+    return API.get('/student/timetable')
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return axios.get('/api/student/timetable')
+          .catch(secondErr => {
+            console.log('Trying general timetable endpoint');
+            return API.get('/timetable/my-timetable');
+          });
+      });
   }
 };
 
-// Console log to help debug
-console.log('API studentAPI defined:', API.studentAPI != null);
-console.log('API professorAPI defined:', API.professorAPI != null);
-console.log('API publicAPI defined:', API.publicAPI != null);
+console.log('Student API integration complete');
 
 // Export as default and named export for compatibility
 export { API };

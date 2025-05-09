@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import NotificationService from '../../services/NotificationService';
+import NotificationPanel from '../common/NotificationPanel';
 import '../../styles/dashboard.css';
+import '../../styles/notifications.css';
+
 
 // Component imports
 import SideNav from '../common/SideNav';
@@ -9,22 +13,70 @@ import StatCard from '../common/StatCard';
 import ReservationsList from './ReservationsList';
 import UserManagement from './UserManagement';
 import AdminClassrooms from './AdminClassrooms';
-import AdmineDemands from './AdminDemands.js';
-import AdminReports from './AdminReports.js';
+import AdminDemands from './AdminDemands';
+import AdminReports from './AdminReports';
 import AdminSettings from './AdminSettings';
 import Profile from '../common/Profile';
-
+import ClassGroupManagement from './ClassGroupManagement'; // Import the new component
 
 const AdminDashboard = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  // Fetch notification count on component mount
+  useEffect(() => {
+    const fetchNotificationCount = async () => {
+      try {
+        // Get unread notifications count
+        const count = await NotificationService.getUnreadCount();
+        setPendingNotificationCount(count);
+
+        // Optionally set up polling to update the count periodically
+        const interval = setInterval(async () => {
+          const updatedCount = await NotificationService.getUnreadCount();
+          setPendingNotificationCount(updatedCount);
+        }, 60000); // Update every minute
+
+        return () => clearInterval(interval);
+      } catch (error) {
+        console.error("Error fetching notification count:", error);
+        // In case of error, you could set a fallback value based on pendingDemands
+        setPendingNotificationCount(pendingDemands.length);
+      }
+    };
+
+    fetchNotificationCount();
+  }, []);
+
+  // Toggle notifications panel
+  const toggleNotifications = () => {
+    setShowNotifications(!showNotifications);
+    
+    // If opening notifications, mark them as read
+    if (!showNotifications) {
+      markNotificationsAsRead();
+    }
+  };
+  
+  // Mark notifications as read
+  const markNotificationsAsRead = async () => {
+    try {
+      await NotificationService.markAllAsRead();
+      setPendingNotificationCount(0);
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+    }
+  };
   
   // Mock data - in a real app, these would come from an API
   const [stats, setStats] = useState({
     totalClassrooms: 24,
     activeReservations: 18,
     pendingDemands: 7,
-    totalUsers: 156
+    totalUsers: 156,
+    totalClassGroups: 3 // Added new stat for class groups
   });
   
   const [recentReservations, setRecentReservations] = useState([
@@ -86,8 +138,6 @@ const AdminDashboard = () => {
       purpose: 'Extra Lab Session'
     }
   ]);
-  
-  const [showNotifications, setShowNotifications] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -109,6 +159,9 @@ const AdminDashboard = () => {
     const updatedDemands = pendingDemands.filter(demand => demand.id !== id);
     setPendingDemands(updatedDemands);
     
+    // Update notification count after approval
+    setPendingNotificationCount(prev => Math.max(0, prev - 1));
+    
     alert('Reservation approved successfully.');
   };
 
@@ -123,6 +176,9 @@ const AdminDashboard = () => {
       // Remove from pending demands if exists
       const updatedDemands = pendingDemands.filter(demand => demand.id !== id);
       setPendingDemands(updatedDemands);
+      
+      // Update notification count after rejection
+      setPendingNotificationCount(prev => Math.max(0, prev - 1));
       
       alert('Reservation rejected successfully.');
     }
@@ -160,6 +216,13 @@ const AdminDashboard = () => {
           value={stats.totalUsers}
           color="red"
           description="42 professors, 114 students"
+        />
+        <StatCard
+          icon="fas fa-graduation-cap"
+          title="Class Groups"
+          value={stats.totalClassGroups}
+          color="purple"
+          description="Active course groups"
         />
       </div>
       
@@ -299,75 +362,18 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // Sidebar navigation links
+  // Sidebar navigation links - updated to include Class Groups
   const navLinks = [
     { to: '/admin', icon: 'fas fa-tachometer-alt', text: 'Dashboard', exact: true },
     { to: '/admin/classrooms', icon: 'fas fa-chalkboard', text: 'Classrooms' },
     { to: '/admin/reservations', icon: 'fas fa-calendar-check', text: 'Reservations' },
     { to: '/admin/demands', icon: 'fas fa-bell', text: 'Demands' },
     { to: '/admin/users', icon: 'fas fa-users', text: 'Users' },
+    { to: '/admin/class-groups', icon: 'fas fa-graduation-cap', text: 'Class Groups' }, // Added new link
     { to: '/admin/reports', icon: 'fas fa-chart-bar', text: 'Reports' },
     { to: '/admin/settings', icon: 'fas fa-cog', text: 'Settings' },
     { to: '/admin/profile', icon: 'fas fa-user', text: 'Profile' }
   ];
-
-  // Modal for notifications
-  const NotificationsModal = () => (
-    <div 
-      className={`modal-backdrop ${showNotifications ? 'show' : ''}`}
-      onClick={() => setShowNotifications(false)}
-    >
-      <div 
-        className="modal-container"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3 className="modal-title">Notifications</h3>
-          <button className="close-modal" onClick={() => setShowNotifications(false)}>
-            &times;
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="notification-item">
-            <div className="notification-icon icon-yellow">
-              <i className="fas fa-bell"></i>
-            </div>
-            <div className="notification-content">
-              <div className="notification-title">New Reservation Request</div>
-              <div className="notification-text">
-                John Doe requested Room 203 for Mar 26, 2025
-              </div>
-              <div className="notification-time">5 minutes ago</div>
-            </div>
-          </div>
-          <div className="notification-item">
-            <div className="notification-icon icon-red">
-              <i className="fas fa-exclamation-circle"></i>
-            </div>
-            <div className="notification-content">
-              <div className="notification-title">Reservation Cancelled</div>
-              <div className="notification-text">
-                Professor Wilson cancelled Room 101 for Mar 24, 2025
-              </div>
-              <div className="notification-time">2 hours ago</div>
-            </div>
-          </div>
-          <div className="notification-item">
-            <div className="notification-icon icon-blue">
-              <i className="fas fa-user"></i>
-            </div>
-            <div className="notification-content">
-              <div className="notification-title">New User Registration</div>
-              <div className="notification-text">
-                Jane Smith registered as a Student
-              </div>
-              <div className="notification-time">Yesterday</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="dashboard">
@@ -378,38 +384,50 @@ const AdminDashboard = () => {
         onLogout={handleLogout}
         currentUser={currentUser}
         userRole="Admin"
+        notificationCount={pendingNotificationCount}  // Pass the count to SideNav
       />
       
       <div className="content-wrapper">
         <div className="header">
           <h1>Admin Dashboard</h1>
-          <div className="top-bar-actions">
-            <button 
-              className="action-button notification-badge" 
-              onClick={() => setShowNotifications(true)}
-            >
-              <i className="fas fa-bell"></i>
-            </button>
+          <div className="header-actions">
+            <div className="notification-bell-wrapper">
+              <button 
+                className="btn-notification" 
+                onClick={toggleNotifications}
+                title="View notifications"
+              >
+                <i className="fas fa-bell"></i>
+                {pendingNotificationCount > 0 && (
+                  <span className="header-notification-count">{pendingNotificationCount}</span>
+                )}
+              </button>
+            </div>
             <button className="action-button">
               <i className="fas fa-bars"></i>
             </button>
           </div>
         </div>
         
+        {/* Notifications Panel */}
+        {showNotifications && (
+          <div className="notifications-container">
+            <NotificationPanel userRole="admin" />
+          </div>
+        )}
+        
         <Routes>
           <Route path="/" element={<DashboardHome />} />
-          <Route path="/reservations" element={<ReservationsList reservations={recentReservations} />} />
+          <Route path="/reservations" element={<ReservationsList reservations={recentReservations} notificationCount={pendingNotificationCount} />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/classrooms" element={<AdminClassrooms />} />
-          <Route path="/demands" element={<AdmineDemands />}
-           />
-           <Route path="/settings" element={<AdminSettings />} />
+          <Route path="/demands" element={<AdminDemands />} />
+          <Route path="/class-groups" element={<ClassGroupManagement />} /> {/* New route */}
+          <Route path="/settings" element={<AdminSettings />} />
           <Route path="/reports" element={<AdminReports />} />
-          <Route path="/profile" element={<Profile />} /> {/* Autres routes... */}
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </div>
-      
-      {showNotifications && <NotificationsModal />}
     </div>
   );
 };

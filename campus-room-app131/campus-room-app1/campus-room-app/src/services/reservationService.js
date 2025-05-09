@@ -279,7 +279,7 @@ export const updateReservationStatus = (id, status) => {
 };
 
 /**
- * Delete a reservation
+ * Delete or cancel a reservation
  * @param {string} id - Reservation ID
  * @returns {Object} Result object { success, message }
  */
@@ -289,7 +289,8 @@ export const deleteReservation = (id) => {
   let professorIndex = professorReservations.findIndex(res => res.id === id);
   
   if (professorIndex !== -1) {
-    professorReservations.splice(professorIndex, 1);
+    // Instead of removing the reservation, mark it as CANCELED
+    professorReservations[professorIndex].status = 'CANCELED';
     localStorage.setItem('professorReservations', JSON.stringify(professorReservations));
     return { success: true, message: 'Reservation cancelled successfully' };
   }
@@ -299,14 +300,14 @@ export const deleteReservation = (id) => {
   let studentIndex = studentReservations.findIndex(res => res.id === id);
   
   if (studentIndex !== -1) {
-    studentReservations.splice(studentIndex, 1);
+    // Instead of removing the reservation, mark it as CANCELED
+    studentReservations[studentIndex].status = 'CANCELED';
     localStorage.setItem('studentReservations', JSON.stringify(studentReservations));
     return { success: true, message: 'Reservation cancelled successfully' };
   }
   
   return { success: false, message: 'Reservation not found' };
 };
-
 /**
  * Get available classrooms
  * @param {Object} filters - Filter criteria

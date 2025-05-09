@@ -2,10 +2,12 @@ package com.campusroom.service;
 
 import com.campusroom.dto.ReservationDTO;
 import com.campusroom.dto.ReservationRequestDTO;
+import com.campusroom.model.Classroom;
 import com.campusroom.model.Notification;
 import com.campusroom.model.Reservation;
 import com.campusroom.model.StudyRoom;
 import com.campusroom.model.User;
+import com.campusroom.repository.ClassroomRepository;
 import com.campusroom.repository.NotificationRepository;
 import com.campusroom.repository.ReservationRepository;
 import com.campusroom.repository.StudyRoomRepository;
@@ -42,6 +44,9 @@ public class StudentReservationService {
     private NotificationRepository notificationRepository;
 
     @Autowired
+private ClassroomRepository classroomRepository;
+    
+    @Autowired
 private ReservationEmailService reservationEmailService;
 
     /**
@@ -56,53 +61,55 @@ private ReservationEmailService reservationEmailService;
                 .collect(Collectors.toList());
     }
     
-    // Then modify the createStudyRoomReservation method to include email notification
+/**
+ * Creates a classroom reservation request for a student
+ */
 @Transactional
-public ReservationDTO createStudyRoomReservation(ReservationRequestDTO requestDTO) {
-    System.out.println("Création d'une demande de réservation de salle d'étude: " + requestDTO);
+public ReservationDTO createClassroomReservation(ReservationRequestDTO requestDTO) {
+    System.out.println("Creating classroom reservation request: " + requestDTO);
 
     try {
         User currentUser = getCurrentUser();
-        StudyRoom studyRoom = studyRoomRepository.findById(requestDTO.getRoomId())
-                .orElseThrow(() -> new RuntimeException("Study room not found with id: " + requestDTO.getRoomId()));
+        Classroom classroom = classroomRepository.findById(requestDTO.getClassroomId())
+                .orElseThrow(() -> new RuntimeException("Classroom not found with id: " + requestDTO.getClassroomId()));
 
-        // Convertir la date
+        // Convert the date
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
         Date date = dateFormat.parse(requestDTO.getDate());
 
-        // Vérifier qu'il n'y a pas de conflit
-        if (hasConflictingReservation(studyRoom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
-            throw new RuntimeException("Cette salle d'étude n'est plus disponible pour cette plage horaire");
+        // Check for conflicts
+        if (hasConflictingClassroomReservation(classroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
+            throw new RuntimeException("This classroom is no longer available for this time slot");
         }
 
-        // Créer la réservation avec un ID UUID
+        // Create the reservation with UUID
         Reservation reservation = new Reservation();
         reservation.setId(UUID.randomUUID().toString());
         reservation.setUser(currentUser);
-        reservation.setStudyRoom(studyRoom);
+        reservation.setClassroom(classroom);
         reservation.setDate(date);
         reservation.setStartTime(requestDTO.getStartTime());
         reservation.setEndTime(requestDTO.getEndTime());
         reservation.setPurpose(requestDTO.getPurpose());
         reservation.setNotes(requestDTO.getNotes());
-        reservation.setStatus("PENDING"); // Statut initial: en attente d'approbation
+        reservation.setStatus("PENDING"); // Initial status: pending approval
 
         Reservation savedReservation = reservationRepository.save(reservation);
-        System.out.println("Réservation de salle d'étude créée avec succès: " + savedReservation.getId());
+        System.out.println("Classroom reservation created successfully: " + savedReservation.getId());
 
-        // Créer une notification pour les administrateurs
-        createAdminNotification(savedReservation);
+        // Create admin notification
+        createAdminClassroomNotification(savedReservation);
         
-        // Envoyer un email aux administrateurs - AJOUT
+        // Send email to admins if notifications are enabled
         List<User> admins = userRepository.findByRole(User.Role.ADMIN);
         reservationEmailService.notifyAdminsAboutNewReservation(savedReservation, admins);
 
         return convertToReservationDTO(savedReservation);
 
     } catch (ParseException e) {
-        System.err.println("Erreur lors de la conversion de la date: " + e.getMessage());
+        System.err.println("Date conversion error: " + e.getMessage());
         e.printStackTrace();
-        throw new RuntimeException("Format de date invalide: " + requestDTO.getDate());
+        throw new RuntimeException("Invalid date format: " + requestDTO.getDate());
     }
 }
     /**
@@ -143,67 +150,81 @@ public ReservationDTO createStudyRoomReservation(ReservationRequestDTO requestDT
         return convertToReservationDTO(updatedReservation);
     }
 
-    /**
-     * Vérifie s'il y a des réservations en conflit pour une salle d'étude donnée
-     */
-    private boolean hasConflictingReservation(StudyRoom studyRoom, Date date, String startTime, String endTime) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String dateStr = dateFormat.format(date);
 
-        // Convertir en minutes pour faciliter la comparaison
-        int requestStartMinutes = convertTimeToMinutes(startTime);
-        int requestEndMinutes = convertTimeToMinutes(endTime);
-
-        // Trouver toutes les réservations approuvées ou en attente pour cette salle à cette date
-        List<Reservation> existingReservations = reservationRepository.findByStudyRoomAndDateAndStatusIn(
-                studyRoom, date, List.of("APPROVED", "PENDING"));
-
-        // Vérifier s'il y a des conflits
-        for (Reservation res : existingReservations) {
-            int resStartMinutes = convertTimeToMinutes(res.getStartTime());
-            int resEndMinutes = convertTimeToMinutes(res.getEndTime());
-
-            // Vérifier si les plages horaires se chevauchent
-            if (!(requestEndMinutes <= resStartMinutes || requestStartMinutes >= resEndMinutes)) {
-                System.out.println("Conflit trouvé avec la réservation: " + res.getId());
-                return true;
-            }
-        }
-
-        return false;
+/**
+ * Checks if there are conflicting reservations for a classroom
+ */
+private boolean hasConflictingClassroomReservation(Classroom classroom, Date date, String startTime, String endTime) {
+    // Basic validation first
+    int requestStartMinutes = convertTimeToMinutes(startTime);
+    int requestEndMinutes = convertTimeToMinutes(endTime);
+    
+    // Check for invalid time range
+    if (requestEndMinutes <= requestStartMinutes) {
+        throw new RuntimeException("Invalid time range: end time must be after start time");
     }
-
-    /**
-     * Convertit une heure au format "HH:mm" en minutes depuis minuit
-     */
-    private int convertTimeToMinutes(String time) {
-        String[] parts = time.split(":");
-        return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
-    }
-
-    /**
-     * Crée une notification pour les administrateurs concernant une nouvelle
-     * demande de réservation d'étudiant
-     */
-    private void createAdminNotification(Reservation reservation) {
-        // Trouver tous les utilisateurs avec le rôle ADMIN
-        List<User> admins = userRepository.findByRole(User.Role.ADMIN);
-
-        for (User admin : admins) {
-            Notification notification = new Notification();
-            notification.setTitle("Nouvelle demande de salle d'étude");
-            notification.setMessage("L'étudiant " + reservation.getUser().getFirstName() + " "
-                    + reservation.getUser().getLastName() + " a demandé à réserver la salle d'étude "
-                    + reservation.getStudyRoom().getName() + " le "
-                    + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate()) + ".");
-            notification.setUser(admin);
-            notification.setRead(false);
-            notification.setIconClass("fas fa-book");
-            notification.setIconColor("blue");
-
-            notificationRepository.save(notification);
+    
+    // Find all approved or pending reservations for this classroom on this date
+    List<Reservation> existingReservations = reservationRepository.findByClassroomAndDateAndStatusIn(
+            classroom, date, List.of("APPROVED", "PENDING"));
+    
+    // Check each existing reservation for overlap
+    for (Reservation res : existingReservations) {
+        int resStartMinutes = convertTimeToMinutes(res.getStartTime());
+        int resEndMinutes = convertTimeToMinutes(res.getEndTime());
+        
+        if (requestEndMinutes > resStartMinutes && requestStartMinutes < resEndMinutes) {
+            System.out.println("Conflict found with reservation: " + res.getId());
+            System.out.println("Requested time: " + startTime + " - " + endTime);
+            System.out.println("Conflicting time: " + res.getStartTime() + " - " + res.getEndTime());
+            return true;
         }
     }
+    
+    return false;
+}
+   /**
+ * Convertit une heure au format "HH:mm" en minutes depuis minuit
+ * Handles edge cases and validation better
+ */
+private int convertTimeToMinutes(String time) {
+    if (time == null || !time.matches("^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")) {
+        throw new RuntimeException("Invalid time format: " + time + ". Expected format is HH:MM");
+    }
+    
+    String[] parts = time.split(":");
+    int hours = Integer.parseInt(parts[0]);
+    int minutes = Integer.parseInt(parts[1]);
+    
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        throw new RuntimeException("Invalid time values: hours must be 0-23, minutes must be 0-59");
+    }
+    
+    return hours * 60 + minutes;
+}
+
+/**
+ * Create a notification for admins about new classroom reservation by student
+ */
+private void createAdminClassroomNotification(Reservation reservation) {
+    // Find all admin users
+    List<User> admins = userRepository.findByRole(User.Role.ADMIN);
+
+    for (User admin : admins) {
+        Notification notification = new Notification();
+        notification.setTitle("New Classroom Reservation Request");
+        notification.setMessage("Student " + reservation.getUser().getFirstName() + " " 
+                + reservation.getUser().getLastName() + " has requested to reserve classroom "
+                + reservation.getClassroom().getRoomNumber() + " on "
+                + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate()) + ".");
+        notification.setUser(admin);
+        notification.setRead(false);
+        notification.setIconClass("fas fa-school");
+        notification.setIconColor("blue");
+
+        notificationRepository.save(notification);
+    }
+}
 
     /**
      * Crée une notification pour les administrateurs concernant une annulation

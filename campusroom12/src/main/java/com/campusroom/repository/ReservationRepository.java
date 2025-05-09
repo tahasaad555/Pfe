@@ -100,4 +100,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     
     @Query("SELECT FUNCTION('MONTH', r.date) as month, COUNT(r) as count FROM Reservation r WHERE r.studyRoom IS NOT NULL GROUP BY FUNCTION('MONTH', r.date)")
     List<Object[]> countStudyRoomReservationsByMonth();
+
+    public List<Reservation> findByUserAndDateBetweenAndStatusIn(User currentUser, Date weekStart, Date weekEnd, List<String> of);
+
+   
+
 }
