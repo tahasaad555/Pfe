@@ -178,4 +178,5 @@ public ResponseEntity<AuthResponse> changeUserStatus(@PathVariable Long id, @Req
         userService.deleteUser(id);
         return ResponseEntity.ok(Map.of("deleted", true));
     }
+    
 }

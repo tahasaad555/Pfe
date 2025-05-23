@@ -55,8 +55,7 @@ public class ReservationEmailService {
             String subject = "";
             String content = "";
             String roomName = reservation.getClassroom() != null ? 
-                    reservation.getClassroom().getRoomNumber() : 
-                    (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+        reservation.getClassroom().getRoomNumber() : "N/A";
             String dateStr = new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate());
             String timeStr = reservation.getStartTime() + " to " + reservation.getEndTime();
             
@@ -114,8 +113,7 @@ public class ReservationEmailService {
         try {
             User requestingUser = reservation.getUser();
             String roomName = reservation.getClassroom() != null ? 
-                    reservation.getClassroom().getRoomNumber() : 
-                    (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+        reservation.getClassroom().getRoomNumber() : "N/A";
             String dateStr = new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate());
             String timeStr = reservation.getStartTime() + " to " + reservation.getEndTime();
             String userRole = requestingUser.getRole().name();
@@ -165,8 +163,7 @@ public class ReservationEmailService {
             message.setTo(user.getEmail());
             
             String roomName = reservation.getClassroom() != null ? 
-                    reservation.getClassroom().getRoomNumber() : 
-                    (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+        reservation.getClassroom().getRoomNumber() : "N/A";
             String dateStr = new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate());
             String timeStr = reservation.getStartTime() + " to " + reservation.getEndTime();
             

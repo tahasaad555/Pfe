@@ -18,7 +18,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     int countByRole(User.Role role);
     int countByStatus(String status);
     Optional<User> findByResetToken(String resetToken);
-
-    
-  
 }

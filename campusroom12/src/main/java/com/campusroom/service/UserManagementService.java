@@ -2,10 +2,13 @@ package com.campusroom.service;
 
 import com.campusroom.dto.TimetableEntryDTO;
 import com.campusroom.dto.UserDTO;
+import com.campusroom.model.Reservation;
 import com.campusroom.model.TimetableEntry;
 import com.campusroom.model.User;
+import com.campusroom.repository.ReservationRepository;
 import com.campusroom.repository.TimetableEntryRepository;
 import com.campusroom.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,11 @@ public class UserManagementService {
     
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+private EntityManager entityManager;
+    @Autowired
+private ReservationRepository reservationRepository; // Add this at the class level
+
     
     /**
      * Get all users
@@ -159,18 +167,68 @@ public class UserManagementService {
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
     }
     
-    /**
-     * Delete a user
-     */
-    @Transactional
-    public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new RuntimeException("User not found with id: " + id);
+/**
+ * Delete a user and their associated reservations
+ */
+@Transactional
+public void deleteUser(Long id) {
+    try {
+        // Verify if the user exists
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+        
+        // 1. First delete all reservations associated with the user
+        System.out.println("Deleting reservations for user with ID " + id);
+        List<Reservation> userReservations = reservationRepository.findByUser(user);
+        if (userReservations != null && !userReservations.isEmpty()) {
+            System.out.println("Found " + userReservations.size() + " reservations to delete");
+            reservationRepository.deleteAll(userReservations);
         }
-        userRepository.deleteById(id);
+        
+        // 2. Clear the timetable entries list (without trying to delete them)
+        if (user.getTimetableEntries() != null) {
+            user.getTimetableEntries().clear();
+            userRepository.save(user); // Save to clear references
+        }
+        
+        // 3. Temporarily disable foreign key constraints (MySQL solution)
+        entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS=0").executeUpdate();
+        
+        try {
+            // 4. Delete the user directly
+            userRepository.delete(user);
+            System.out.println("User with ID " + id + " deleted successfully");
+        } finally {
+            // 5. Re-enable foreign key constraints
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS=1").executeUpdate();
+        }
+    } catch (Exception e) {
+        System.err.println("Error deleting user " + id + ": " + e.getMessage());
+        e.printStackTrace();
+        
+        // 6. If all else fails, try logical deletion
+        try {
+            User user = userRepository.findById(id).orElse(null);
+            if (user != null) {
+                // Delete reservations even in logical deletion mode
+                List<Reservation> userReservations = reservationRepository.findByUser(user);
+                if (userReservations != null && !userReservations.isEmpty()) {
+                    reservationRepository.deleteAll(userReservations);
+                }
+                
+                user.setStatus("deleted");
+                user.setEmail("deleted_" + id + "@example.com");
+                userRepository.save(user);
+                System.out.println("Logical deletion of user " + id + " completed");
+            }
+        } catch (Exception ex) {
+            System.err.println("Logical deletion also failed: " + ex.getMessage());
+        }
+        
+        throw new RuntimeException("Failed to delete user", e);
     }
-    
-    /**
+}
+/**
      * Reset user password
      */
     @Transactional

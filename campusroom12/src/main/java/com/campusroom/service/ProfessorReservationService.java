@@ -48,6 +48,9 @@ public class ProfessorReservationService {
     @Autowired
     private SystemSettingsProvider settingsProvider;
     
+    @Autowired
+    private ClassroomAvailabilityService availabilityService;
+    
     private SystemSettingsDTO currentSettings;
     
     @EventListener(SystemSettingsProvider.SettingsChangedEvent.class)
@@ -67,11 +70,10 @@ public class ProfessorReservationService {
                 .map(this::convertToReservationDTO)
                 .collect(Collectors.toList());
     }
-
     /**
      * Recherche des salles disponibles selon les critères
      */
-    public List<ClassroomDTO> findAvailableClassrooms(String dateStr, String startTime, String endTime,
+ public List<ClassroomDTO> findAvailableClassrooms(String dateStr, String startTime, String endTime,
             String classType, int capacity) {
         System.out.println("Recherche de salles disponibles avec les critères:");
         System.out.println("Date: " + dateStr + ", Heure: " + startTime + " - " + endTime);
@@ -95,9 +97,10 @@ public class ProfessorReservationService {
 
             System.out.println("Salles correspondant aux critères de base: " + matchingClassrooms.size());
 
-            // Filtrer les salles qui ont des réservations en conflit pour cette plage horaire
+            // Filtrer les salles disponibles en utilisant le service centralisé
             List<Classroom> availableClassrooms = matchingClassrooms.stream()
-                    .filter(classroom -> !hasConflictingReservation(classroom, date, startTime, endTime))
+                    .filter(classroom -> availabilityService.isClassroomAvailable(
+                        classroom.getId(), date, startTime, endTime))
                     .collect(Collectors.toList());
 
             System.out.println("Salles disponibles après filtrage des conflits: " + availableClassrooms.size());
@@ -114,7 +117,7 @@ public class ProfessorReservationService {
         }
     }
 
-       @Transactional
+     @Transactional
     public ReservationDTO createReservationRequest(ReservationRequestDTO requestDTO) {
         System.out.println("Creating reservation request: " + requestDTO);
 
@@ -135,8 +138,9 @@ public class ProfessorReservationService {
             // Validate based on settings
             validateReservationRequest(requestDTO, date);
 
-            // Check for conflicts
-            if (hasConflictingReservation(classroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
+            // Check for conflicts using the centralized availability service
+            if (!availabilityService.isClassroomAvailable(classroom.getId(), date, 
+                                                      requestDTO.getStartTime(), requestDTO.getEndTime())) {
                 throw new RuntimeException("This classroom is no longer available for this time slot");
             }
 
@@ -181,11 +185,11 @@ public class ProfessorReservationService {
             throw new RuntimeException("Invalid date format: " + requestDTO.getDate());
         }
     }
-
     // Similar validation method as in StudentReservationService
     private void validateReservationRequest(ReservationRequestDTO requestDTO, Date requestDate) {
         // Similar validation logic using currentSettings
     }
+    
     /**
      * Modifie une demande de réservation existante
      * Nouvelle méthode ajoutée pour permettre la modification
@@ -235,7 +239,8 @@ public class ProfessorReservationService {
                 !reservation.getStartTime().equals(requestDTO.getStartTime()) ||
                 !reservation.getEndTime().equals(requestDTO.getEndTime())) {
                 
-                if (hasConflictingReservation(newClassroom, date, requestDTO.getStartTime(), requestDTO.getEndTime())) {
+                if (!availabilityService.isClassroomAvailable(newClassroom.getId(), date, 
+                                                         requestDTO.getStartTime(), requestDTO.getEndTime())) {
                     throw new RuntimeException("La salle n'est pas disponible pour cette plage horaire");
                 }
             }
@@ -313,70 +318,38 @@ public class ProfessorReservationService {
     /**
      * Vérifie s'il y a des réservations en conflit pour une salle donnée
      */
- /**
- * Vérifie s'il y a des réservations en conflit pour une salle donnée
- */
-private boolean hasConflictingReservation(Classroom classroom, Date date, String startTime, String endTime) {
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    String dateStr = dateFormat.format(date);
-    
-    // Basic validation first
-    int requestStartMinutes = convertTimeToMinutes(startTime);
-    int requestEndMinutes = convertTimeToMinutes(endTime);
-    
-    // Check for invalid time range
-    if (requestEndMinutes <= requestStartMinutes) {
-        throw new RuntimeException("Invalid time range: end time must be after start time");
-    }
-    
-    // Find all approved or pending reservations for this classroom on this date
-    List<Reservation> existingReservations = reservationRepository.findByClassroomAndDateAndStatusIn(
-            classroom, date, List.of("APPROVED", "PENDING"));
-    
-    // Check each existing reservation for overlap
-    for (Reservation res : existingReservations) {
-        int resStartMinutes = convertTimeToMinutes(res.getStartTime());
-        int resEndMinutes = convertTimeToMinutes(res.getEndTime());
+    private boolean hasConflictingReservation(Classroom classroom, Date date, String startTime, String endTime) {
+        // Validation de base d'abord
+        int requestStartMinutes = convertTimeToMinutes(startTime);
+        int requestEndMinutes = convertTimeToMinutes(endTime);
         
-        // Time ranges overlap if:
-        // 1. New reservation starts during existing reservation, OR
-        // 2. New reservation ends during existing reservation, OR
-        // 3. New reservation completely contains existing reservation
-        
-        // The NOT overlapping condition is: new end <= existing start OR new start >= existing end
-        // Therefore, overlapping is: new end > existing start AND new start < existing end
-        if (requestEndMinutes > resStartMinutes && requestStartMinutes < resEndMinutes) {
-            System.out.println("Conflict found with reservation: " + res.getId());
-            System.out.println("Requested time: " + startTime + " - " + endTime);
-            System.out.println("Conflicting time: " + res.getStartTime() + " - " + res.getEndTime());
-            return true;
+        // Vérifier si la plage horaire est invalide
+        if (requestEndMinutes <= requestStartMinutes) {
+            throw new RuntimeException("Invalid time range: end time must be after start time");
         }
+        
+        // Utiliser le service centralisé de disponibilité
+        return !availabilityService.isClassroomAvailable(classroom.getId(), date, startTime, endTime);
     }
-    
-    return false;
-}
+
     /**
      * Convertit une heure au format "HH:mm" en minutes depuis minuit
      */
-  /**
- * Convertit une heure au format "HH:mm" en minutes depuis minuit
- * Handles edge cases and validation better
- */
-private int convertTimeToMinutes(String time) {
-    if (time == null || !time.matches("^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")) {
-        throw new RuntimeException("Invalid time format: " + time + ". Expected format is HH:MM");
+  private int convertTimeToMinutes(String time) {
+        if (time == null || !time.matches("^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")) {
+            throw new RuntimeException("Invalid time format: " + time + ". Expected format is HH:MM");
+        }
+        
+        String[] parts = time.split(":");
+        int hours = Integer.parseInt(parts[0]);
+        int minutes = Integer.parseInt(parts[1]);
+        
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            throw new RuntimeException("Invalid time values: hours must be 0-23, minutes must be 0-59");
+        }
+        
+        return hours * 60 + minutes;
     }
-    
-    String[] parts = time.split(":");
-    int hours = Integer.parseInt(parts[0]);
-    int minutes = Integer.parseInt(parts[1]);
-    
-    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-        throw new RuntimeException("Invalid time values: hours must be 0-23, minutes must be 0-59");
-    }
-    
-    return hours * 60 + minutes;
-}
 
     /**
      * Crée une notification pour les administrateurs concernant une nouvelle
@@ -465,7 +438,7 @@ private int convertTimeToMinutes(String time) {
     private ReservationDTO convertToReservationDTO(Reservation reservation) {
         String roomName = reservation.getClassroom() != null
                 ? reservation.getClassroom().getRoomNumber()
-                : (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+                : "N/A";
 
         return ReservationDTO.builder()
                 .id(reservation.getId())

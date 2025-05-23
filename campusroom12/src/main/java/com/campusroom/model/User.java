@@ -51,6 +51,10 @@ public class User {
     
     @Column(length = 20)
     private String phone;
+    
+    // Add profile image URL field
+    @Column(length = 500)
+    private String profileImageUrl;
 
     @Column(nullable = true)
     private String resetToken;
@@ -86,8 +90,9 @@ public class User {
         updatedAt = new Date();
     }
 
-    public void setProfileImageUrl(String imageUrl) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    // Updated setProfileImageUrl method
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     public enum Role {
@@ -153,6 +158,11 @@ public class User {
     
     public String getPhone() {
         return phone;
+    }
+    
+    // Add getter for profileImageUrl
+    public String getProfileImageUrl() {
+        return profileImageUrl;
     }
 
     // Setters

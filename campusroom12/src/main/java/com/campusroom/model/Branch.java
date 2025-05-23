@@ -29,6 +29,15 @@ public class Branch {
     @OneToMany(mappedBy = "branch", cascade = CascadeType.ALL)
     private List<ClassGroup> classGroups = new ArrayList<>();
     
+    // Many-to-many relationship with students
+    @ManyToMany
+    @JoinTable(
+        name = "branch_students",
+        joinColumns = @JoinColumn(name = "branch_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private List<User> students = new ArrayList<>();
+    
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     private Date createdAt;
@@ -46,6 +55,18 @@ public class Branch {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = new Date();
+    }
+
+    // Helper method to add a student to the branch
+    public void addStudent(User student) {
+        if (student.getRole() == User.Role.STUDENT && !students.contains(student)) {
+            students.add(student);
+        }
+    }
+
+    // Helper method to remove a student from the branch
+    public void removeStudent(User student) {
+        students.remove(student);
     }
 
     // Explicit getters and setters
@@ -79,6 +100,14 @@ public class Branch {
 
     public void setClassGroups(List<ClassGroup> classGroups) {
         this.classGroups = classGroups;
+    }
+
+    public List<User> getStudents() {
+        return students;
+    }
+
+    public void setStudents(List<User> students) {
+        this.students = students;
     }
 
     public Date getCreatedAt() {

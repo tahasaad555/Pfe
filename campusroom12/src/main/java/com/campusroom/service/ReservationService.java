@@ -81,37 +81,7 @@ public class ReservationService {
                 .map(this::convertToReservationDTO)
                 .collect(Collectors.toList());
     }
-    
-    /**
-     * Get reservations for study rooms
-     */
-    public List<ReservationDTO> getStudyRoomReservations() {
-        System.out.println("ReservationService: getStudyRoomReservations");
-        List<Reservation> studyRoomReservations = reservationRepository.findAll()
-                .stream()
-                .filter(r -> r.getStudyRoom() != null)
-                .collect(Collectors.toList());
-                
-        return studyRoomReservations.stream()
-                .map(this::convertToReservationDTO)
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Get study room reservations by status
-     */
-    public List<ReservationDTO> getStudyRoomReservationsByStatus(String status) {
-        System.out.println("ReservationService: getStudyRoomReservationsByStatus(" + status + ")");
-        List<Reservation> reservations = reservationRepository.findByStatus(status)
-                .stream()
-                .filter(r -> r.getStudyRoom() != null)
-                .collect(Collectors.toList());
-
-        return reservations.stream()
-                .map(this::convertToReservationDTO)
-                .collect(Collectors.toList());
-    }
-
+   
     /**
      * Get pending demands
      */
@@ -264,12 +234,11 @@ public class ReservationService {
 
         Notification notification = new Notification();
         notification.setTitle("Reservation Approved");
-        notification.setMessage("Your reservation request for "
-                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
-                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
-                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
-                + " has been approved.");
+       notification.setMessage("Your reservation request for "
+        + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
+        + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+        + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+        + " has been approved.");
         notification.setUser(user);
         notification.setRead(false);
         notification.setIconClass("fas fa-check-circle");
@@ -286,15 +255,13 @@ public class ReservationService {
 
         Notification notification = new Notification();
         notification.setTitle("Reservation Rejected");
-        notification.setMessage("Your reservation request for "
-                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
-                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
-                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
-                + " has been rejected."
-                + (reservation.getNotes() != null && !reservation.getNotes().isEmpty() ? 
-                   " Reason: " + reservation.getNotes() : ""));
-        notification.setUser(user);
+       notification.setMessage("Your reservation request for "
+        + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
+        + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+        + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+        + " has been rejected."
+        + (reservation.getNotes() != null && !reservation.getNotes().isEmpty() ? 
+            " Reason: " + reservation.getNotes() : "")); notification.setUser(user);
         notification.setRead(false);
         notification.setIconClass("fas fa-times-circle");
         notification.setIconColor("red");
@@ -313,12 +280,10 @@ public class ReservationService {
             Notification notification = new Notification();
             notification.setTitle("Reservation Cancelled");
             notification.setMessage(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName()
-                    + " has cancelled their reservation for "
-                    + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
-                       (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
-                    + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                    + " from " + reservation.getStartTime() + " to " + reservation.getEndTime() + ".");
-            notification.setUser(admin);
+        + " has cancelled their reservation for "
+        + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
+        + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+        + " from " + reservation.getStartTime() + " to " + reservation.getEndTime() + "."); notification.setUser(admin);
             notification.setRead(false);
             notification.setIconClass("fas fa-calendar-times");
             notification.setIconColor("orange");
@@ -336,11 +301,10 @@ public class ReservationService {
         Notification notification = new Notification();
         notification.setTitle("Reservation Cancelled");
         notification.setMessage("Your reservation for "
-                + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : 
-                   (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A"))
-                + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
-                + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
-                + " has been cancelled.");
+        + (reservation.getClassroom() != null ? reservation.getClassroom().getRoomNumber() : "N/A")
+        + " on " + new SimpleDateFormat("dd/MM/yyyy").format(reservation.getDate())
+        + " from " + reservation.getStartTime() + " to " + reservation.getEndTime()
+        + " has been cancelled.");
         notification.setUser(user);
         notification.setRead(false);
         notification.setIconClass("fas fa-calendar-times");
@@ -352,42 +316,40 @@ public class ReservationService {
     /**
      * Convert Reservation entity to ReservationDTO
      */
-    private ReservationDTO convertToReservationDTO(Reservation reservation) {
-        String roomName = reservation.getClassroom() != null
-                ? reservation.getClassroom().getRoomNumber()
-                : (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+   private ReservationDTO convertToReservationDTO(Reservation reservation) {
+    String roomName = reservation.getClassroom() != null
+            ? reservation.getClassroom().getRoomNumber() : "N/A";
 
-        return ReservationDTO.builder()
-                .id(reservation.getId())
-                .classroom(roomName)
-                .reservedBy(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName())
-                .role(reservation.getUser().getRole().name())
-                .date(new SimpleDateFormat("yyyy-MM-dd").format(reservation.getDate()))
-                .time(reservation.getStartTime() + " - " + reservation.getEndTime())
-                .status(reservation.getStatus())
-                .purpose(reservation.getPurpose())
-                .build();
-    }
+    return ReservationDTO.builder()
+            .id(reservation.getId())
+            .classroom(roomName)
+            .reservedBy(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName())
+            .role(reservation.getUser().getRole().name())
+            .date(new SimpleDateFormat("yyyy-MM-dd").format(reservation.getDate()))
+            .time(reservation.getStartTime() + " - " + reservation.getEndTime())
+            .status(reservation.getStatus())
+            .purpose(reservation.getPurpose())
+            .build();
+}
 
     /**
      * Convert Reservation entity to DemandDTO
      * Used for pending requests display in admin dashboard
      */
-    private DemandDTO convertToDemandDTO(Reservation reservation) {
-        String roomName = reservation.getClassroom() != null
-                ? reservation.getClassroom().getRoomNumber()
-                : (reservation.getStudyRoom() != null ? reservation.getStudyRoom().getName() : "N/A");
+   private DemandDTO convertToDemandDTO(Reservation reservation) {
+    String roomName = reservation.getClassroom() != null
+            ? reservation.getClassroom().getRoomNumber() : "N/A";
 
-        return DemandDTO.builder()
-                .id(reservation.getId())
-                .classroom(roomName)
-                .reservedBy(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName())
-                .role(reservation.getUser().getRole().name())
-                .date(new SimpleDateFormat("yyyy-MM-dd").format(reservation.getDate()))
-                .time(reservation.getStartTime() + " - " + reservation.getEndTime())
-                .purpose(reservation.getPurpose())
-                .notes(reservation.getNotes())
-                .createdAt(reservation.getCreatedAt())
-                .build();
-    }
+    return DemandDTO.builder()
+            .id(reservation.getId())
+            .classroom(roomName)
+            .reservedBy(reservation.getUser().getFirstName() + " " + reservation.getUser().getLastName())
+            .role(reservation.getUser().getRole().name())
+            .date(new SimpleDateFormat("yyyy-MM-dd").format(reservation.getDate()))
+            .time(reservation.getStartTime() + " - " + reservation.getEndTime())
+            .purpose(reservation.getPurpose())
+            .notes(reservation.getNotes())
+            .createdAt(reservation.getCreatedAt())
+            .build();
+}
 }

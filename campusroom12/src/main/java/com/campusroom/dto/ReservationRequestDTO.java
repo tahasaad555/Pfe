@@ -98,5 +98,4 @@ public class ReservationRequestDTO {
     public void setRoomId(String roomId) {
         this.roomId = roomId;
     }
-    
 }

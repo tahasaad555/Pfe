@@ -4,8 +4,10 @@ import API from '../../api';
 import ReservationEmailService from '../../services/ReservationEmailService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
+import LocalImage from '../common/LocalImage';
+import LocalImageService from '../../utils/LocalImageService';
 
-const RoomReservation = ({ fullPage = false }) => {
+const StudentClassroomReservation = ({ fullPage = false }) => {
   const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -31,7 +33,7 @@ const RoomReservation = ({ fullPage = false }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [searchPerformed, setSearchPerformed] = useState(false);
-  const [viewMode, setViewMode] = useState('all'); // 'all' ou 'search'
+  const [viewMode, setViewMode] = useState('all'); // 'all' or 'search'
   const [fetchError, setFetchError] = useState(null);
 
   // Load all classrooms when component mounts
@@ -64,33 +66,29 @@ const RoomReservation = ({ fullPage = false }) => {
     const startTime = formData.startTime;
     const endTime = formData.endTime;
     
-    console.log('Validating times: Start =', startTime, 'End =', endTime);
-    
     // Convert to minutes since midnight
     const getMinutes = (time) => {
       const [hours, minutes] = time.split(':').map(Number);
-      const totalMinutes = hours * 60 + minutes;
-      console.log(`Converting ${time}: ${hours}h × 60 + ${minutes}m = ${totalMinutes} minutes`);
-      return totalMinutes;
+      return hours * 60 + minutes;
     };
     
     const startMinutes = getMinutes(startTime);
     const endMinutes = getMinutes(endTime);
     
-    console.log('Start minutes:', startMinutes, 'End minutes:', endMinutes, 'Difference:', endMinutes - startMinutes);
-    
     // Validate time range (8:00 - 18:00)
     const min = getMinutes('08:00');
     const max = getMinutes('18:00');
-    if (endMinutes === startMinutes) {
+    
+    if (startMinutes < min || endMinutes > max) {
       setMessage({
-        text: 'End time must be different than start time',
+        text: 'Reservation times must be between 8:00 and 18:00',
         type: 'error'
       });
       return false;
     }
     
-    if (endMinutes < startMinutes) {
+    // Ensure end time is after start time
+    if (endMinutes <= startMinutes) {
       setMessage({
         text: 'End time must be after start time',
         type: 'error'
@@ -98,7 +96,6 @@ const RoomReservation = ({ fullPage = false }) => {
       return false;
     }
     
-    console.log('Time validation passed');
     return true;
   };
 
@@ -183,17 +180,19 @@ const RoomReservation = ({ fullPage = false }) => {
   }, [allClassrooms, isEditMode, formData.classroomId]);
 
   // Create fallback methods if API is not properly defined
-useEffect(() => {
-  if (!API.studentAPI) {
-    console.error('studentAPI is undefined, creating fallback methods');
-    // Create fallback methods for student
-    API.studentAPI = {
-      searchAvailableClassrooms: (criteria) => API.post('/api/student/classrooms/search', criteria),
-      requestClassroomReservation: (data) => API.post('/api/student/classroom-reservations', data),
-      // Other necessary methods...
-    };
-  }
-}, []);
+  useEffect(() => {
+    if (!API.studentAPI) {
+      console.error('studentAPI is undefined, creating fallback methods');
+      // Create fallback methods
+      API.studentAPI = {
+        searchAvailableClassrooms: (criteria) => API.post('/api/student/classroom-reservations/search', criteria),
+        requestClassroomReservation: (data) => API.post('/api/student/classroom-reservations/request', data),
+        editClassroomReservation: (id, data) => API.put(`/api/student/classroom-reservations/${id}`, data),
+        cancelReservation: (id) => API.put(`/api/student/reservations/${id}/cancel`),
+        getMyReservations: () => API.get('/api/student/my-reservations')
+      };
+    }
+  }, []);
 
   // Function to fetch all classrooms using the API service
   const fetchAllClassrooms = async () => {
@@ -247,30 +246,29 @@ useEffect(() => {
     }));
   };
 
- // Then update the handleSearch function around line 150
-const handleSearch = async (e) => {
-  e.preventDefault();
-  setIsLoading(true);
-  setMessage({ text: '', type: '' });
-  setSearchResults([]);
-  setSelectedClassroom(null);
-  setSearchPerformed(true);
-  setViewMode('search');
-
-  try {
-    // Validate inputs
-    if (!formData.date || !formData.startTime || !formData.endTime || !formData.capacity) {
-      setMessage({ text: 'Please fill in all required fields', type: 'error' });
-      setIsLoading(false);
-      return;
-    }
-
-    // Add the validation check here
-    if (!validateTimeRange()) {
-      setIsLoading(false);
-      return;
-    }
-
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage({ text: '', type: '' });
+    setSearchResults([]);
+    setSelectedClassroom(null);
+    setSearchPerformed(true);
+    setViewMode('search');
+  
+    try {
+      // Validate inputs
+      if (!formData.date || !formData.startTime || !formData.endTime || !formData.capacity) {
+        setMessage({ text: 'Please fill in all required fields', type: 'error' });
+        setIsLoading(false);
+        return;
+      }
+  
+      // Add the validation check here
+      if (!validateTimeRange()) {
+        setIsLoading(false);
+        return;
+      }
+  
       // Convert capacity to number
       const capacityNum = parseInt(formData.capacity, 10);
       if (isNaN(capacityNum) || capacityNum <= 0) {
@@ -278,7 +276,7 @@ const handleSearch = async (e) => {
         setIsLoading(false);
         return;
       }
-
+  
       // Create search request object
       const searchRequest = {
         date: formData.date,
@@ -290,37 +288,26 @@ const handleSearch = async (e) => {
       
       console.log('Searching available classrooms with request:', searchRequest);
       
-      // Use the API service with fallback
-      // Use the API service with fallback
-let response;
-try {
-  response = await API.studentAPI.searchAvailableClassrooms(searchRequest);
-} catch (err) {
-  console.error('Error using API service for search:', err);
-  
-  // If it's an authentication error, let the interceptor handle it
-  if (err.response && err.response.status === 401) {
-    throw err;
-  }
-  
-  // Direct fallback with fetch
-  const fetchResponse = await fetch('/api/student/classrooms/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    },
-    body: JSON.stringify(searchRequest)
-  });
-  
-  if (!fetchResponse.ok) {
-    throw new Error(`Failed to search classrooms: ${fetchResponse.status}`);
-  }
-  
-  response = { 
-    data: await fetchResponse.json() 
-  };
-}
+      // Modified: Use the student API for searching
+      let response;
+      try {
+        // First try student-specific endpoint
+        response = await API.studentAPI.searchAvailableClassrooms(searchRequest);
+      } catch (err) {
+        console.error('Error using student API for search:', err);
+        
+        try {
+          // Try general room search endpoint as fallback
+          response = await API.post('/api/rooms/search', searchRequest);
+        } catch (fallbackErr) {
+          console.error('Error using fallback search:', fallbackErr);
+          
+          // Last resort: use professor API but filter client-side
+          console.log('Using professor API as last resort');
+          const profResponse = await API.post('/api/professor/reservations/search', searchRequest);
+          response = profResponse;
+        }
+      }
       
       const data = response.data;
       console.log('Search results:', data);
@@ -350,29 +337,25 @@ try {
     }));
   };
 
-  // Fixed submitReservation function that handles both create and edit operations
- // Finally update the handleSubmitReservation function around line 235
-const handleSubmitReservation = async () => {
-  if (!selectedClassroom && !formData.classroomId) {
-    setMessage({ text: 'Please select a classroom', type: 'error' });
-    return;
-  }
-
-  if (!formData.purpose) {
-    setMessage({ text: 'Please provide a purpose for the reservation', type: 'error' });
-    return;
-  }
-
-  // Add the validation check here
-  if (!validateTimeRange()) {
-    return;
-  }
-
-  setIsLoading(true);
-  setMessage({ text: '', type: '' });
-
-
-
+  const handleSubmitReservation = async () => {
+    if (!selectedClassroom && !formData.classroomId) {
+      setMessage({ text: 'Please select a classroom', type: 'error' });
+      return;
+    }
+  
+    if (!formData.purpose) {
+      setMessage({ text: 'Please provide a purpose for the reservation', type: 'error' });
+      return;
+    }
+  
+    // Add the validation check here
+    if (!validateTimeRange()) {
+      return;
+    }
+  
+    setIsLoading(true);
+    setMessage({ text: '', type: '' });
+  
     try {
       // Verify token is present
       const token = localStorage.getItem('token');
@@ -384,7 +367,7 @@ const handleSubmitReservation = async () => {
         }, 2000);
         return;
       }
-
+  
       // Create request object in format expected by backend
       const requestBody = {
         classroomId: formData.classroomId || selectedClassroom.id,
@@ -392,55 +375,53 @@ const handleSubmitReservation = async () => {
         startTime: formData.startTime,
         endTime: formData.endTime,
         purpose: formData.purpose,
-        notes: formData.notes || "", // Use empty string if notes is null/undefined
+        notes: formData.notes || "", 
         classType: formData.classType || selectedClassroom.type,
         capacity: parseInt(formData.capacity, 10) || selectedClassroom.capacity
       };
-
-      // If we're editing an existing reservation, include the ID
+  
+      // Modified: Use the student API for reservations
       if (formData.isEdit && formData.id) {
+        // For updating existing reservation
         requestBody.id = formData.id;
         console.log('Updating existing reservation:', requestBody);
         
-        // For update operations, use PUT
-        // First try direct endpoint for updating
-    // For update operations, use PUT
-// First try direct endpoint for updating
-try {
-  // Try to use a direct PUT endpoint for updates
-  const response = await API.put(`/api/student/classroom-reservations/${formData.id}`, requestBody);
-  console.log('Update reservation success response:', response.data);
-} catch (updateErr) {
-  console.error('Direct update failed, attempting alternative method:', updateErr);
-  
-  // If direct update fails, first cancel the existing reservation
-  await API.put(`/api/student/reservations/${formData.id}/cancel`);
-  console.log('Successfully cancelled old reservation before replacement');
-  
-  // Then create a new reservation with the updated details
-  const response = await API.studentAPI.requestClassroomReservation(requestBody);
-  console.log('Created replacement reservation:', response.data);
-}
+        try {
+          // Try to use student API for updates
+          const response = await API.studentAPI.editClassroomReservation(formData.id, requestBody);
+          console.log('Update reservation success response:', response.data);
+        } catch (updateErr) {
+          console.error('Direct update failed, attempting alternative method:', updateErr);
+          
+          // If direct update fails, first cancel the existing reservation
+          await API.studentAPI.cancelReservation(formData.id);
+          console.log('Successfully cancelled old reservation before replacement');
+          
+          // Then create a new reservation with the updated details
+          const response = await API.studentAPI.requestClassroomReservation(requestBody);
+          console.log('Created replacement reservation:', response.data);
+        }
       } else {
-        // For new reservations, use POST
-       // For new reservations, use POST
-console.log('Creating new reservation:', requestBody);
-const response = await API.studentAPI.requestClassroomReservation(requestBody);
-console.log('Create reservation success response:', response.data);
+        // For new reservations
+        console.log('Creating new classroom reservation for student:', requestBody);
+        
+        // KEY CHANGE: Use requestClassroomReservation instead of requestReservation
+        const response = await API.studentAPI.requestClassroomReservation(requestBody);
+        console.log('Create reservation success response:', response.data);
+  
         // Send email notification to admin for new reservations only (not updates)
         try {
-        // Around line 323: Update the reservationData object
-const reservationData = {
-  id: response.data?.reservation?.id || response.data?.id || 'NEW_REQUEST',
-  room: selectedClassroom.roomNumber,
-  reservedBy: currentUser?.firstName + ' ' + currentUser?.lastName || 'Student', // Update name format
-  role: 'STUDENT', // Change from PROFESSOR to STUDENT
-  date: formData.date,
-  time: `${formData.startTime} - ${formData.endTime}`,
-  purpose: formData.purpose,
-  notes: formData.notes || "",
-  userEmail: currentUser?.email || ''
-};
+          const reservationData = {
+            id: response.data?.reservation?.id || response.data?.id || 'NEW_REQUEST',
+            room: selectedClassroom.roomNumber,
+            reservedBy: currentUser?.name || 'Student',
+            role: 'STUDENT',
+            date: formData.date,
+            time: `${formData.startTime} - ${formData.endTime}`,
+            purpose: formData.purpose,
+            notes: formData.notes || "",
+            userEmail: currentUser?.email || ''
+          };
           
           await ReservationEmailService.notifyAdminAboutNewRequest(reservationData);
           console.log('Admin notification email sent successfully');
@@ -449,12 +430,12 @@ const reservationData = {
           // Continue process even if email fails
         }
       }
-
+  
       // Clean up localStorage if we were editing
       if (isEditMode) {
         localStorage.removeItem('editingReservation');
       }
-
+  
       // Reset form and show success message
       setFormData({
         id: '',
@@ -480,7 +461,7 @@ const reservationData = {
       
       // Redirect back to reservations page after a short delay
       setTimeout(() => {
-        navigate('/student/reservations'); // Change from /professor/reservations to /student/reservations
+        navigate('/student/reservations');
       }, 3000);
     } catch (error) {
       console.error('Error submitting reservation:', error);
@@ -613,15 +594,13 @@ const reservationData = {
                 className={`classroom-card ${selectedClassroom && selectedClassroom.id === classroom.id ? 'selected' : ''}`}
                 onClick={() => handleSelectClassroom(classroom)}
               >
-                {/* Classroom image */}
+                {/* Classroom image - Using LocalImage component */}
                 <div className="classroom-image">
-                  <img 
+                  <LocalImage 
                     src={classroom.image || '/images/classroom-default.jpg'} 
                     alt={classroom.roomNumber}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = '/images/classroom-default.jpg';
-                    }}
+                    fallbackSrc="/images/classroom-default.jpg"
+                    style={{width: '100%', height: '100%', objectFit: 'cover'}}
                   />
                 </div>
                 <h4>{classroom.roomNumber}</h4>
@@ -671,15 +650,13 @@ const reservationData = {
                 className={`classroom-card ${selectedClassroom && selectedClassroom.id === classroom.id ? 'selected' : ''}`}
                 onClick={() => handleSelectClassroom(classroom)}
               >
-                {/* Classroom image */}
+                {/* Classroom image - Using LocalImage component */}
                 <div className="classroom-image">
-                  <img 
+                  <LocalImage 
                     src={classroom.image || '/images/classroom-default.jpg'} 
                     alt={classroom.roomNumber}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = '/images/classroom-default.jpg';
-                    }}
+                    fallbackSrc="/images/classroom-default.jpg"
+                    style={{width: '100%', height: '100%', objectFit: 'cover'}}
                   />
                 </div>
                 <h4>{classroom.roomNumber}</h4>
@@ -710,15 +687,13 @@ const reservationData = {
       <div className="reservation-details-container">
         <h3>{isEditMode ? 'Edit Reservation' : 'Finalize Reservation'}</h3>
         <div className="selected-classroom-info">
-          {/* Selected classroom image */}
+          {/* Selected classroom image - Using LocalImage component */}
           <div className="selected-classroom-image">
-            <img 
+            <LocalImage 
               src={selectedClassroom.image || '/images/classroom-default.jpg'} 
               alt={selectedClassroom.roomNumber}
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = '/images/classroom-default.jpg';
-              }}
+              fallbackSrc="/images/classroom-default.jpg"
+              style={{width: '100%', height: '100%', objectFit: 'cover'}}
             />
           </div>
           <h4>Selected Classroom: {selectedClassroom.roomNumber}</h4>
@@ -766,14 +741,14 @@ const reservationData = {
         <div className="form-group">
           <label htmlFor="purpose">Reservation Purpose <span className="required">*</span></label>
           <input 
-  type="text" 
-  id="purpose" 
-  name="purpose" 
-  placeholder="e.g., Study Group, Project Meeting, Exam Review..." 
-  value={formData.purpose}
-  onChange={handleChange}
-  required 
-/>
+            type="text" 
+            id="purpose" 
+            name="purpose" 
+            placeholder="e.g., Class, Lab, Meeting, Exam..." 
+            value={formData.purpose}
+            onChange={handleChange}
+            required 
+          />
         </div>
         
         <div className="form-group">
@@ -808,10 +783,10 @@ const reservationData = {
   return (
     <div className={fullPage ? "main-content" : "reservation-form-container"}>
       {fullPage && (
- <div className="section-header">
- <h2>{isEditMode ? 'Edit Reservation' : 'Reserve a Classroom'}</h2>
- <p>{isEditMode ? 'Modify your reservation request' : 'Search and reserve a classroom for your student activities'}</p>
-</div>
+        <div className="section-header">
+          <h2>{isEditMode ? 'Edit Classroom Reservation' : 'Reserve a Classroom'}</h2>
+          <p>{isEditMode ? 'Modify your reservation request' : 'Search and reserve a classroom that meets your needs'}</p>
+        </div>
       )}
       
       {message.text && (
@@ -849,4 +824,4 @@ const reservationData = {
   );
 };
 
-export default RoomReservation;
+export default StudentClassroomReservation;

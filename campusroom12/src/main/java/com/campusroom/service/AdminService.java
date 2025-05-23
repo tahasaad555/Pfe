@@ -19,8 +19,6 @@ public class AdminService {
     @Autowired
     private ClassroomRepository classroomRepository;
     
-    @Autowired
-    private StudyRoomRepository studyRoomRepository;
     
     @Autowired
     private ReservationRepository reservationRepository;
@@ -35,7 +33,7 @@ public class AdminService {
     private SystemSettingsRepository settingsRepository;
     
     public DashboardStatsDTO getDashboardStats() {
-        int totalClassrooms = (int) (classroomRepository.count() + studyRoomRepository.count());
+      
         int activeReservations = reservationRepository.countByStatus("APPROVED");
         int pendingDemands = reservationRepository.countByStatus("PENDING");
         int totalUsers = (int) userRepository.count();
@@ -57,7 +55,7 @@ public class AdminService {
                                       studentReservations + " by students";
         
         return DashboardStatsDTO.builder()
-                .totalClassrooms(totalClassrooms)
+             
                 .activeReservations(activeReservations)
                 .pendingDemands(pendingDemands)
                 .totalUsers(totalUsers)
@@ -97,13 +95,11 @@ public class AdminService {
         stats.put("professorReservations", reservationRepository.countByUserRoleAndStatus(User.Role.PROFESSOR, "APPROVED"));
         stats.put("studentReservations", reservationRepository.countByUserRoleAndStatus(User.Role.STUDENT, "APPROVED"));
         stats.put("totalClassrooms", classroomRepository.count());
-        stats.put("totalStudyRooms", studyRoomRepository.count());
+
         stats.put("totalUsers", userRepository.count());
         
         // Salles populaires
         List<Object[]> popularClassrooms = reservationRepository.findPopularClassrooms(PageRequest.of(0, 3));
-        List<Object[]> popularStudyRooms = reservationRepository.findPopularStudyRooms(PageRequest.of(0, 2));
-        
         List<ReportDataDTO.PopularRoomDTO> popularRooms = new ArrayList<>();
         
         long totalReservations = (long) stats.get("totalReservations");
@@ -120,18 +116,7 @@ public class AdminService {
                     .build());
         }
         
-        for (Object[] result : popularStudyRooms) {
-            String room = (String) result[0];
-            long count = (long) result[1];
-            double percentage = (double) count / totalReservations * 100;
-            
-            popularRooms.add(ReportDataDTO.PopularRoomDTO.builder()
-                    .room(room)
-                    .count(count)
-                    .percentage(percentage)
-                    .build());
-        }
-        
+      
         // Utilisateurs les plus actifs
         List<Object[]> activeUsers = reservationRepository.findMostActiveUsers(PageRequest.of(0, 5));
         List<ReportDataDTO.ActiveUserDTO> mostActiveUsers = new ArrayList<>();

@@ -2,7 +2,6 @@ package com.campusroom.repository;
 
 import com.campusroom.model.Classroom;
 import com.campusroom.model.Reservation;
-import com.campusroom.model.StudyRoom;
 import com.campusroom.model.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +17,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     // Méthodes de base
     List<Reservation> findByStatus(String status);
     int countByStatus(String status);
+     List<Reservation> findByClassroom(Classroom classroom);
     
     // Méthodes liées à l'utilisateur
     List<Reservation> findByUser(User user);
@@ -31,18 +31,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     // Ajout de la méthode pour rechercher par classroom, date et statuts
     List<Reservation> findByClassroomAndDateAndStatusIn(Classroom classroom, Date date, List<String> statuses);
     
-    // Nouvelles méthodes pour les salles d'étude
-    // Ajout de la méthode pour rechercher par studyRoom et date
-    List<Reservation> findByStudyRoomAndDate(StudyRoom studyRoom, Date date);
-    
-    // Ajout de la méthode pour rechercher par studyRoom, date et statuts
-    List<Reservation> findByStudyRoomAndDateAndStatusIn(StudyRoom studyRoom, Date date, List<String> statuses);
-    
-    // Méthode pour vérifier les réservations de salle d'étude d'un utilisateur
-    List<Reservation> findByUserAndStudyRoomNotNull(User user);
-    
-    // Méthode pour rechercher les réservations par salle d'étude
-    List<Reservation> findByStudyRoom(StudyRoom studyRoom);
+    // Nouvelle méthode pour rechercher par ID de salle, date et statuts
+    List<Reservation> findByClassroomIdAndDateAndStatusIn(String classroomId, Date date, List<String> statuses);
     
     @Query("SELECT r FROM Reservation r WHERE r.user.id = :userId")
     List<Reservation> findByUserId(@Param("userId") Long userId);
@@ -82,27 +72,11 @@ public interface ReservationRepository extends JpaRepository<Reservation, String
     @Query("SELECT r.classroom.roomNumber as room, COUNT(r) as count FROM Reservation r WHERE r.classroom IS NOT NULL GROUP BY r.classroom.roomNumber ORDER BY count DESC")
     List<Object[]> findPopularClassrooms(Pageable pageable);
     
-    @Query("SELECT r.studyRoom.name as room, COUNT(r) as count FROM Reservation r WHERE r.studyRoom IS NOT NULL GROUP BY r.studyRoom.name ORDER BY count DESC")
-    List<Object[]> findPopularStudyRooms(Pageable pageable);
-    
     @Query("SELECT r.user.id as userId, COUNT(r) as count FROM Reservation r GROUP BY r.user.id ORDER BY count DESC")
     List<Object[]> findMostActiveUsers(Pageable pageable);
     
     @Query("SELECT FUNCTION('MONTH', r.date) as month, COUNT(r) as count FROM Reservation r WHERE r.user.role = :role GROUP BY FUNCTION('MONTH', r.date)")
     List<Object[]> countReservationsByMonthAndRole(@Param("role") User.Role role);
     
-    // Statistiques spécifiques pour les salles d'étude
-    @Query("SELECT COUNT(r) FROM Reservation r WHERE r.studyRoom IS NOT NULL AND r.status = :status")
-    int countStudyRoomReservationsByStatus(@Param("status") String status);
-    
-    @Query("SELECT COUNT(r) FROM Reservation r WHERE r.studyRoom IS NOT NULL AND r.user.role = :role AND r.status = :status")
-    int countStudyRoomReservationsByUserRoleAndStatus(@Param("role") User.Role role, @Param("status") String status);
-    
-    @Query("SELECT FUNCTION('MONTH', r.date) as month, COUNT(r) as count FROM Reservation r WHERE r.studyRoom IS NOT NULL GROUP BY FUNCTION('MONTH', r.date)")
-    List<Object[]> countStudyRoomReservationsByMonth();
-
     public List<Reservation> findByUserAndDateBetweenAndStatusIn(User currentUser, Date weekStart, Date weekEnd, List<String> of);
-
-   
-
 }

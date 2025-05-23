@@ -581,27 +581,60 @@ const UserManagement = () => {
     return true;
   };
 
-  // Delete user
   const deleteUser = async (id) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         setActionInProgress(true);
-        // Call API to delete user
-        await API.delete(`/users/${id}`);
+        console.log('Tentative de suppression de l\'utilisateur avec ID:', id);
         
-        // Update local state
+        // Tentative avec l'API directe d'abord
+        try {
+          await API.delete(`/users/${id}`);
+          console.log('Utilisateur supprimé avec succès via API directe');
+        } catch (directError) {
+          console.error('Erreur avec l\'appel API direct, tentative via userAPI:', directError);
+          
+          // Si l'API directe échoue, essayer avec l'API userAPI si disponible
+          if (API.userAPI && typeof API.userAPI.deleteUser === 'function') {
+            await API.userAPI.deleteUser(id);
+            console.log('Utilisateur supprimé avec succès via userAPI');
+          } else {
+            throw directError; // Relancer l'erreur si userAPI n'est pas disponible
+          }
+        }
+        
+        // Mise à jour de l'état local
         const updatedUsers = users.filter(user => user.id !== id);
         setUsers(updatedUsers);
         setFilteredUsers(updatedUsers.filter(user => matchesCurrentFilters(user)));
-        setActionInProgress(false);
+        
+        // Afficher un message de succès
+        alert('Utilisateur supprimé avec succès');
       } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Failed to delete user: ' + (error.response?.data?.message || 'Unknown error'));
+        console.error('Erreur lors de la suppression de l\'utilisateur:', error);
+        
+        // Message d'erreur amélioré
+        let errorMessage = 'Échec de la suppression de l\'utilisateur: ';
+        if (error.response && error.response.data) {
+          if (error.response.data.message) {
+            errorMessage += error.response.data.message;
+          } else if (typeof error.response.data === 'string') {
+            errorMessage += error.response.data;
+          } else {
+            errorMessage += 'Erreur serveur - vérifiez les logs du serveur';
+          }
+        } else if (error.message) {
+          errorMessage += error.message;
+        } else {
+          errorMessage += 'Erreur inconnue';
+        }
+        
+        alert(errorMessage);
+      } finally {
         setActionInProgress(false);
       }
     }
   };
-
   // View user details
   const viewUser = (id) => {
     // You can implement navigation to user detail page

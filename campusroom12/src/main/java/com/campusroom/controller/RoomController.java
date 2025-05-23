@@ -3,7 +3,6 @@ package com.campusroom.controller;
 import com.campusroom.dto.AvailabilityDTO;
 import com.campusroom.dto.ClassroomDTO;
 import com.campusroom.dto.ResponseMessageDTO;
-import com.campusroom.dto.StudyRoomDTO;
 import com.campusroom.service.RoomService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -12,8 +11,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 
 /**
  * Contrôleur pour la gestion des salles (salles de classe et salles d'étude)
@@ -25,18 +26,6 @@ public class RoomController {
 
     @Autowired
     private RoomService roomService;
-    
-    /**
-     * Endpoint public pour récupérer toutes les salles d'étude
-     * Accessible sans authentification
-     */
-    @GetMapping("/public-studyrooms")
-    public ResponseEntity<List<StudyRoomDTO>> getAllStudyRoomsPublic() {
-        System.out.println("GET /public-studyrooms");
-        List<StudyRoomDTO> studyRooms = roomService.getAllStudyRooms();
-        System.out.println("Retourne " + studyRooms.size() + " salles d'étude (endpoint public)");
-        return ResponseEntity.ok(studyRooms);
-    }
     
     // ======== ENDPOINT POUR L'AFFICHAGE INITIAL DES SALLES ========
     
@@ -69,40 +58,83 @@ public class RoomController {
         return ResponseEntity.ok(classroom);
     }
     
-    @PostMapping("/classrooms")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ClassroomDTO> createClassroom(@RequestBody ClassroomDTO classroomDTO) {
-        System.out.println("POST /api/rooms/classrooms");
-        System.out.println("Données reçues: " + classroomDTO);
-        
-        try {
-            ClassroomDTO createdClassroom = roomService.createClassroom(classroomDTO);
-            System.out.println("Salle créée avec succès: " + createdClassroom);
-            return ResponseEntity.ok(createdClassroom);
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la création de la salle: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
-    }
+   @PostMapping("/classrooms")
+@PreAuthorize("hasRole('ADMIN')")
+public ResponseEntity<?> createClassroom(@RequestBody ClassroomDTO classroomDTO) {
+    System.out.println("POST /api/rooms/classrooms");
+    System.out.println("Données reçues: " + classroomDTO);
     
-    @PutMapping("/classrooms/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ClassroomDTO> updateClassroom(@PathVariable String id, @RequestBody ClassroomDTO classroomDTO) {
-        System.out.println("PUT /api/rooms/classrooms/" + id);
-        System.out.println("Données reçues pour mise à jour: " + classroomDTO);
+    try {
+        ClassroomDTO createdClassroom = roomService.createClassroom(classroomDTO);
+        System.out.println("Salle créée avec succès: " + createdClassroom);
+        return ResponseEntity.ok(createdClassroom);
+    } catch (RuntimeException e) {
+        System.err.println("Erreur lors de la création de la salle: " + e.getMessage());
         
-        try {
-            ClassroomDTO updatedClassroom = roomService.updateClassroom(id, classroomDTO);
-            System.out.println("Salle mise à jour avec succès: " + updatedClassroom);
-            return ResponseEntity.ok(updatedClassroom);
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la mise à jour de la salle: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
+        // Return a structured error response
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", e.getMessage());
+        errorResponse.put("timestamp", new Date());
+        
+        // Return 400 Bad Request for validation errors
+        if (e.getMessage().contains("already exists") || e.getMessage().contains("is required")) {
+            return ResponseEntity.badRequest().body(errorResponse);
         }
+        
+        // Return 500 Internal Server Error for other runtime exceptions
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    } catch (Exception e) {
+        System.err.println("Erreur inattendue lors de la création de la salle: " + e.getMessage());
+        e.printStackTrace();
+        
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "An unexpected error occurred while creating the classroom");
+        errorResponse.put("timestamp", new Date());
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
     }
+}
+
+@PutMapping("/classrooms/{id}")
+@PreAuthorize("hasRole('ADMIN')")
+public ResponseEntity<?> updateClassroom(@PathVariable String id, @RequestBody ClassroomDTO classroomDTO) {
+    System.out.println("PUT /api/rooms/classrooms/" + id);
+    System.out.println("Données reçues pour mise à jour: " + classroomDTO);
     
+    try {
+        ClassroomDTO updatedClassroom = roomService.updateClassroom(id, classroomDTO);
+        System.out.println("Salle mise à jour avec succès: " + updatedClassroom);
+        return ResponseEntity.ok(updatedClassroom);
+    } catch (RuntimeException e) {
+        System.err.println("Erreur lors de la mise à jour de la salle: " + e.getMessage());
+        
+        // Return a structured error response
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", e.getMessage());
+        errorResponse.put("timestamp", new Date());
+        
+        // Return 400 Bad Request for validation errors
+        if (e.getMessage().contains("already exists") || e.getMessage().contains("is required") || e.getMessage().contains("not found")) {
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+        
+        // Return 500 Internal Server Error for other runtime exceptions
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    } catch (Exception e) {
+        System.err.println("Erreur inattendue lors de la mise à jour de la salle: " + e.getMessage());
+        e.printStackTrace();
+        
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "An unexpected error occurred while updating the classroom");
+        errorResponse.put("timestamp", new Date());
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+}
     @DeleteMapping("/classrooms/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Boolean>> deleteClassroom(@PathVariable String id) {
@@ -118,74 +150,6 @@ public class RoomController {
             throw e;
         }
     }
-    
-    // ======== ENDPOINTS POUR LES SALLES D'ÉTUDE ========
-    
-    @GetMapping("/study-rooms")
-    public ResponseEntity<List<StudyRoomDTO>> getAllStudyRooms() {
-        System.out.println("GET /api/rooms/study-rooms");
-        List<StudyRoomDTO> studyRooms = roomService.getAllStudyRooms();
-        System.out.println("Retourne " + studyRooms.size() + " salles d'étude");
-        return ResponseEntity.ok(studyRooms);
-    }
-    
-    @GetMapping("/study-rooms/{id}")
-    public ResponseEntity<StudyRoomDTO> getStudyRoomById(@PathVariable String id) {
-        System.out.println("GET /api/rooms/study-rooms/" + id);
-        StudyRoomDTO studyRoom = roomService.getStudyRoomById(id);
-        return ResponseEntity.ok(studyRoom);
-    }
-    
-    @PostMapping("/study-rooms")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<StudyRoomDTO> createStudyRoom(@RequestBody StudyRoomDTO studyRoomDTO) {
-        System.out.println("POST /api/rooms/study-rooms");
-        System.out.println("Données reçues: " + studyRoomDTO);
-        
-        try {
-            StudyRoomDTO createdStudyRoom = roomService.createStudyRoom(studyRoomDTO);
-            System.out.println("Salle d'étude créée avec succès: " + createdStudyRoom);
-            return ResponseEntity.ok(createdStudyRoom);
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la création de la salle d'étude: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
-    }
-    
-    @PutMapping("/study-rooms/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<StudyRoomDTO> updateStudyRoom(@PathVariable String id, @RequestBody StudyRoomDTO studyRoomDTO) {
-        System.out.println("PUT /api/rooms/study-rooms/" + id);
-        System.out.println("Données reçues pour mise à jour: " + studyRoomDTO);
-        
-        try {
-            StudyRoomDTO updatedStudyRoom = roomService.updateStudyRoom(id, studyRoomDTO);
-            System.out.println("Salle d'étude mise à jour avec succès: " + updatedStudyRoom);
-            return ResponseEntity.ok(updatedStudyRoom);
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la mise à jour de la salle d'étude: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
-    }
-    
-    @DeleteMapping("/study-rooms/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Boolean>> deleteStudyRoom(@PathVariable String id) {
-        System.out.println("DELETE /api/rooms/study-rooms/" + id);
-        
-        try {
-            roomService.deleteStudyRoom(id);
-            System.out.println("Salle d'étude supprimée avec succès: " + id);
-            return ResponseEntity.ok(Map.of("deleted", true));
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la suppression de la salle d'étude: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
-    }
-    
     // ======== ENDPOINTS POUR LA DISPONIBILITÉ DES SALLES ========
     
     /**

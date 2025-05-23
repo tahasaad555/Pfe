@@ -72,6 +72,21 @@ http
              .requestMatchers("/profile").authenticated()
              .requestMatchers("/profile/**").authenticated() 
              .requestMatchers("/users/profile/**").authenticated()
+                // Add these new paths:
+        .requestMatchers("/api/student/reservations/search").hasRole("STUDENT")
+        .requestMatchers("/api/student/reservations/request").hasRole("STUDENT")
+        .requestMatchers("/api/student/reservations/**").hasRole("STUDENT")
+        
+        // If you want to use general reservation endpoints
+        .requestMatchers("/api/reservations/request").authenticated()
+        .requestMatchers("/api/reservations/search").authenticated()
+        .requestMatchers("/api/reservations/**").authenticated()
+        
+                // Add these new classroom reservation endpoints:
+        .requestMatchers("/api/student/classroom-reservations/search").hasRole("STUDENT")
+        .requestMatchers("/api/student/classroom-reservations/request").hasRole("STUDENT")
+        .requestMatchers("/api/student/classroom-reservations/**").hasRole("STUDENT")
+        
             // Fix: Add exact path mapping for /api/profile
             .requestMatchers("/api/profile").authenticated()
             // Keep the wildcard pattern for sub-paths of /api/profile/

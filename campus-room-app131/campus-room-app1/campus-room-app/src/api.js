@@ -51,13 +51,46 @@ instance.interceptors.response.use(
 );
 
 // File upload API calls
+// File upload API calls
 export const fileAPI = {
-  // Upload an image file
+  // Upload profile with image
+  uploadProfileWithImage: (formData) => {
+    return instance.post('/profile/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: progressEvent => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        console.log('Upload progress:', percentCompleted);
+      }
+    });
+  },
+  
+  // Upload an image file with progress tracking
   uploadImage: (file) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    return instance.post('/uploads/images', formData);
+    return instance.post('/api/uploads/images', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: progressEvent => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        console.log('Upload progress:', percentCompleted);
+        // You can also use a callback here if needed
+      }
+    });
+  },
+  
+  // Get file metadata
+  getFileMetadata: (fileId) => {
+    return instance.get(`/api/uploads/metadata/${fileId}`);
+  },
+  
+  // Delete a file
+  deleteFile: (fileId) => {
+    return instance.delete(`/api/uploads/files/${fileId}`);
   }
 };
 
@@ -85,28 +118,30 @@ export const authAPI = {
 // Enhanced Student API calls with robust fallback mechanisms
 export const studentAPI = {
   // Get all study rooms
-  getClassrooms: () => {
-    console.log('Fetching classrooms for student...');
-    return instance.get('/api/student/classrooms')
+  getStudyRooms: () => {
+    console.log('Fetching study rooms...');
+    return instance.get('/api/student/study-rooms')
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return instance.get('/student/classrooms')
+        return instance.get('/student/study-rooms')
           .catch(secondErr => {
             console.log('Trying rooms API endpoint');
-            return instance.get('/api/rooms/classrooms');});
+            return instance.get('/api/rooms/study-rooms');
+          });
       });
   },
   
   // Request a study room reservation
-  requestClassroomReservation: (requestData) => {
-    console.log('Requesting classroom reservation:', requestData);
-  return instance.post('/api/student/classroom-reservations', requestData)
-    .catch(err => {
-      console.log('Falling back to direct endpoint without /api prefix');
-      return instance.post('/student/classroom-reservations', requestData)
-        .catch(secondErr => {
-          console.log('Trying general reservations endpoint');
-          return instance.post('/api/reservations/request', requestData);});
+  requestStudyRoomReservation: (requestData) => {
+    console.log('Requesting study room reservation:', requestData);
+    return instance.post('/api/student/study-room-reservations', requestData)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return instance.post('/student/study-room-reservations', requestData)
+          .catch(secondErr => {
+            console.log('Trying general reservations endpoint');
+            return instance.post('/api/reservations/request', requestData);
+          });
       });
   },
   
@@ -153,15 +188,16 @@ export const studentAPI = {
   },
   
   // Search available study rooms
-  searchAvailableClassrooms: (criteria) => {
-    console.log('Searching available classrooms with criteria:', criteria);
-  return instance.post('/api/student/classrooms/search', criteria)
-    .catch(err => {
-      console.log('Falling back to direct endpoint without /api prefix');
-      return instance.post('/student/classrooms/search', criteria)
-        .catch(secondErr => {
-          console.log('Trying general search endpoint');
-          return instance.post('/api/rooms/search', criteria);});
+  searchAvailableStudyRooms: (criteria) => {
+    console.log('Searching available study rooms with criteria:', criteria);
+    return instance.post('/api/student/study-rooms/search', criteria)
+      .catch(err => {
+        console.log('Falling back to direct endpoint without /api prefix');
+        return instance.post('/student/study-rooms/search', criteria)
+          .catch(secondErr => {
+            console.log('Trying general search endpoint');
+            return instance.post('/api/rooms/search', criteria);
+          });
       });
   },
   
@@ -448,7 +484,10 @@ export const userAPI = {
   getAllUsers: () => {
     return instance.get('/users');
   },
-  
+  // Add this to your userAPI object
+deleteUser: (id) => {
+  return instance.delete(`/users/${id}`);
+},
   // Get user by ID
   getUserById: (id) => {
     return instance.get(`/users/${id}`);

@@ -25,10 +25,6 @@ public class Reservation {
     @JoinColumn(name = "classroom_id")
     private Classroom classroom;
     
-    @ManyToOne
-    @JoinColumn(name = "study_room_id")
-    private StudyRoom studyRoom;
-    
     @Column(nullable = false)
     @Temporal(TemporalType.DATE)
     private Date date;
@@ -88,14 +84,6 @@ public class Reservation {
 
     public void setClassroom(Classroom classroom) {
         this.classroom = classroom;
-    }
-
-    public StudyRoom getStudyRoom() {
-        return studyRoom;
-    }
-
-    public void setStudyRoom(StudyRoom studyRoom) {
-        this.studyRoom = studyRoom;
     }
 
     public Date getDate() {

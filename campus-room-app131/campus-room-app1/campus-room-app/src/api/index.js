@@ -1,20 +1,29 @@
 // api/index.js
 import axios from 'axios';
 
-// Configure base URL for API requests
-const API = axios.create({
-  baseURL: '/api',
+// Create the axios instance first with the full URL
+const axiosInstance = axios.create({
+  baseURL: 'http://localhost:8080/api', // Full URL including server and port
   headers: {
     'Content-Type': 'application/json',
   },
-  // Enable CORS credentials
   withCredentials: true
 });
+
+// Define base API object with axios instance and methods
+const API = {
+  instance: axiosInstance,
+  defaults: axiosInstance.defaults,
+  get: (url, config) => axiosInstance.get(url, config),
+  post: (url, data, config) => axiosInstance.post(url, data, config),
+  put: (url, data, config) => axiosInstance.put(url, data, config),
+  delete: (url, config) => axiosInstance.delete(url, config)
+};
 
 console.log('API baseURL configured as:', API.defaults.baseURL);
 
 // Add a response interceptor to handle token expiration
-API.interceptors.response.use(
+axiosInstance.interceptors.response.use(
   (response) => {
     return response;
   },
@@ -69,7 +78,7 @@ API.interceptors.response.use(
 );
 
 // Add request interceptor to add JWT token to requests
-API.interceptors.request.use(
+axiosInstance.interceptors.request.use(
   (config) => {
     // Get and validate token
     const token = localStorage.getItem('token');
@@ -132,7 +141,7 @@ function validateToken(token) {
 }
 
 // Add response time tracking to all requests
-API.interceptors.response.use(
+axiosInstance.interceptors.response.use(
   (response) => {
     // Calculate request duration if metadata exists
     if (response.config.metadata) {
@@ -163,7 +172,6 @@ API.profileAPI = {
       });
     }
     
-    // FIXED: Use the correct path WITHOUT duplicate /api prefix
     return API.get('/profile')
       .catch(error => {
         // Don't retry if it's an auth error
@@ -184,7 +192,7 @@ API.profileAPI = {
             console.log('Second profile endpoint failed, trying a third option...');
             
             // Try direct axios call as a last resort
-            return API.get('/api/profile')
+            return axios.get(API.defaults.baseURL + '/profile')
               .catch(error3 => {
                 console.log('All profile endpoints failed:', error3);
                 return Promise.reject(error3);
@@ -202,7 +210,6 @@ API.profileAPI = {
       });
     }
     
-    // FIXED: Use the correct path WITHOUT duplicate /api prefix
     return API.put('/profile', profileData)
       .catch(error => {
         if (error.isAuthError) {
@@ -223,7 +230,6 @@ API.profileAPI = {
       });
     }
     
-    // FIXED: Use the correct path WITHOUT duplicate /api prefix
     return API.put('/profile/password', passwordData)
       .catch(error => {
         if (error.isAuthError) {
@@ -244,7 +250,6 @@ API.profileAPI = {
       });
     }
     
-    // FIXED: Use the correct path WITHOUT duplicate /api prefix
     return API.get('/profile/user-info')
       .catch(error => {
         if (error.isAuthError) {
@@ -257,7 +262,7 @@ API.profileAPI = {
   }
 };
 
-// Add this after the profileAPI implementation around line 216
+// User API
 API.userAPI = {
   // Get all users
   getAllUsers: () => {
@@ -313,13 +318,11 @@ API.fileAPI = {
   }
 };
 
-// FIX: Update timetableAPI to remove duplicate /api prefix
+// Timetable API
 API.timetableAPI = {
   getMyTimetable: () => {
-    // FIXED: Removed duplicate /api prefix
     return API.get('/timetable/my-timetable');
   },
-  // Other timetable methods would be fixed similarly
   
   // Export timetable to various formats
   exportTimetable: (format = 'ics') => {
@@ -330,56 +333,76 @@ API.timetableAPI = {
   }
 };
 
-// Reports API calls
+// FIXED: Reports API implementation
 API.reportsAPI = {
   // Get comprehensive report data
-  getReportsData: () => {
-    return API.get('/admin/reports');
+  getReportsData: (forceRefresh = false) => {
+    console.log('Calling reportsAPI.getReportsData, force refresh:', forceRefresh);
+    return API.get('/reports', {
+      params: { forceRefresh }
+    });
   },
   
   // Get dashboard statistics
-  getDashboardStats: () => {
-    return API.get('/admin/dashboard/stats');
-  },
-  
-  // Get CSV report data
-  getCSVReport: () => {
-    return API.get('/admin/reports/csv', { 
-      responseType: 'blob'
+  getDashboardStats: (forceRefresh = false) => {
+    console.log('Calling reportsAPI.getDashboardStats, force refresh:', forceRefresh);
+    return API.get('/reports/stats', {
+      params: { forceRefresh }
     });
   },
   
-  // Get Excel report data
-  getExcelReport: () => {
-    return API.get('/admin/reports/excel', { 
-      responseType: 'blob'
+  // Get popular rooms
+  getPopularRooms: (limit = 5, forceRefresh = false) => {
+    console.log(`Calling reportsAPI.getPopularRooms (limit: ${limit}), force refresh:`, forceRefresh);
+    return API.get('/reports/popular-rooms', {
+      params: { limit, forceRefresh }
     });
   },
   
-  // Get PDF report
-  getPDFReport: () => {
-    return API.get('/admin/reports/pdf', { 
-      responseType: 'blob'
+  // Get active users
+  getActiveUsers: (limit = 5, forceRefresh = false) => {
+    console.log(`Calling reportsAPI.getActiveUsers (limit: ${limit}), force refresh:`, forceRefresh);
+    return API.get('/reports/active-users', {
+      params: { limit, forceRefresh }
     });
   },
   
-  // Get popular rooms data
-  getPopularRooms: () => {
-    return API.get('/admin/reports/popular-rooms');
+  // Get monthly activity
+  getMonthlyActivity: (forceRefresh = false) => {
+    console.log('Calling reportsAPI.getMonthlyActivity, force refresh:', forceRefresh);
+    return API.get('/reports/monthly-activity', {
+      params: { forceRefresh }
+    });
   },
   
-  // Get active users data
-  getActiveUsers: () => {
-    return API.get('/admin/reports/active-users');
+  // Get users by role
+  getUsersByRole: (forceRefresh = false) => {
+    console.log('Calling reportsAPI.getUsersByRole, force refresh:', forceRefresh);
+    return API.get('/reports/users-by-role', {
+      params: { forceRefresh }
+    });
   },
   
-  // Get monthly activity data
-  getMonthlyActivity: () => {
-    return API.get('/admin/reports/monthly-activity');
+  // Force regenerate all reports
+  regenerateReports: () => {
+    console.log('Forcing report regeneration');
+    return API.post('/reports/regenerate');
   },
+  
+  // Export CSV report
+  exportCsv: () => {
+    console.log('Exporting CSV report');
+    return API.get('/reports/csv', { responseType: 'blob' });
+  },
+  
+  // Get PDF data
+  getPdfData: () => {
+    console.log('Fetching PDF report data');
+    return API.get('/reports/pdf-data');
+  }
 };
 
-// Class Group API calls - FIXED: Removed duplicate /api prefixes
+// Class Group API calls
 API.classGroupAPI = {
   // Get all class groups
   getAllClassGroups: () => {
@@ -450,10 +473,48 @@ API.studentAPI = {
     return API.get('/student/study-rooms')
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.get('/api/student/study-rooms')
+        return axios.get('http://localhost:8080/api/student/study-rooms')
           .catch(secondErr => {
             console.log('Trying rooms API endpoint');
             return API.get('/rooms/study-rooms');
+          });
+      });
+  },
+  
+  searchAvailableClassrooms: (criteria) => {
+    console.log('Student searching available classrooms with criteria:', criteria);
+    return API.post('/student/classroom-reservations/search', criteria)
+      .catch(err => {
+        console.error('Error with student search endpoint, trying fallback:', err);
+        // Try the room search endpoint as fallback
+        return API.post('/rooms/search', criteria);
+      });
+  },
+
+  requestClassroomReservation: (requestData) => {
+    console.log('Student requesting classroom reservation:', requestData);
+    return API.post('/student/classroom-reservations/request', requestData)
+      .catch(err => {
+        console.error('Error with student reservation endpoint, trying fallback:', err);
+        // Try general endpoint as fallback
+        return API.post('/reservations/request', requestData)
+          .catch(secondErr => {
+            console.error('All reservation endpoints failed:', secondErr);
+            throw secondErr;
+          });
+      });
+  },
+  
+  editClassroomReservation: (id, requestData) => {
+    console.log('Student editing classroom reservation:', id, requestData);
+    return API.put(`/student/classroom-reservations/${id}`, requestData)
+      .catch(err => {
+        console.error('Error with student edit endpoint, trying fallback:', err);
+        // Try general endpoint as fallback
+        return API.put(`/reservations/${id}`, requestData)
+          .catch(secondErr => {
+            console.error('All edit endpoints failed:', secondErr);
+            throw secondErr;
           });
       });
   },
@@ -464,10 +525,9 @@ API.studentAPI = {
     return API.post('/student/study-room-reservations', requestData)
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.post('/api/student/study-room-reservations', requestData)
+        return axios.post('http://localhost:8080/api/student/study-room-reservations', requestData)
           .catch(secondErr => {
             console.log('Trying general reservations endpoint');
-            // Notice we're using /reservations/request without /api prefix because API.post already adds it
             return API.post('/reservations/request', requestData);
           });
       });
@@ -479,7 +539,7 @@ API.studentAPI = {
     return API.put(`/student/study-room-reservations/${id}`, requestData)
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.put(`/api/student/study-room-reservations/${id}`, requestData)
+        return axios.put(`http://localhost:8080/api/student/study-room-reservations/${id}`, requestData)
           .catch(secondErr => {
             console.log('Trying general reservations endpoint');
             return API.put(`/reservations/${id}`, requestData);
@@ -493,7 +553,7 @@ API.studentAPI = {
     return API.get('/student/my-reservations')
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.get('/api/student/my-reservations')
+        return axios.get('http://localhost:8080/api/student/my-reservations')
           .catch(secondErr => {
             console.log('Trying general my-reservations endpoint');
             return API.get('/reservations/my');
@@ -507,7 +567,7 @@ API.studentAPI = {
     return API.put(`/student/reservations/${id}/cancel`)
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.put(`/api/student/reservations/${id}/cancel`)
+        return axios.put(`http://localhost:8080/api/student/reservations/${id}/cancel`)
           .catch(secondErr => {
             console.log('Trying general cancellation endpoint');
             return API.put(`/reservations/${id}/cancel`);
@@ -521,7 +581,7 @@ API.studentAPI = {
     return API.post('/student/study-rooms/search', criteria)
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.post('/api/student/study-rooms/search', criteria)
+        return axios.post('http://localhost:8080/api/student/study-rooms/search', criteria)
           .catch(secondErr => {
             console.log('Trying general search endpoint');
             return API.post('/rooms/search', criteria);
@@ -535,7 +595,7 @@ API.studentAPI = {
     return API.get(`/student/study-rooms/${id}`)
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.get(`/api/student/study-rooms/${id}`)
+        return axios.get(`http://localhost:8080/api/student/study-rooms/${id}`)
           .catch(secondErr => {
             console.log('Trying general rooms endpoint');
             return API.get(`/rooms/study-rooms/${id}`);
@@ -549,7 +609,7 @@ API.studentAPI = {
     return API.get('/student/timetable')
       .catch(err => {
         console.log('Falling back to direct endpoint without /api prefix');
-        return axios.get('/api/student/timetable')
+        return axios.get('http://localhost:8080/api/student/timetable')
           .catch(secondErr => {
             console.log('Trying general timetable endpoint');
             return API.get('/timetable/my-timetable');
@@ -558,7 +618,55 @@ API.studentAPI = {
   }
 };
 
-console.log('Student API integration complete');
+// Branch API calls
+API.branchAPI = {
+  // Get all branches
+  getAllBranches: () => {
+    return API.get('/branches');
+  },
+  
+  // Get branch by ID
+  getBranchById: (id) => {
+    return API.get(`/branches/${id}`);
+  },
+  
+  // Create a new branch
+  createBranch: (branchData) => {
+    return API.post('/branches', branchData);
+  },
+  
+  // Update a branch
+  updateBranch: (id, branchData) => {
+    return API.put(`/branches/${id}`, branchData);
+  },
+  
+  // Delete a branch
+  deleteBranch: (id) => {
+    return API.delete(`/branches/${id}`);
+  },
+  
+  // Get branch students
+  getBranchStudents: (branchId) => {
+    return API.get(`/branches/${branchId}/students`);
+  },
+  
+  // Get available students for branch
+  getAvailableStudentsForBranch: (branchId) => {
+    return API.get(`/branches/${branchId}/available-students`);
+  },
+  
+  // Add student to branch
+  addStudentToBranch: (branchId, studentId) => {
+    return API.post(`/branches/${branchId}/students/${studentId}`);
+  },
+  
+  // Remove student from branch
+  removeStudentFromBranch: (branchId, studentId) => {
+    return API.delete(`/branches/${branchId}/students/${studentId}`);
+  }
+};
+
+console.log('API module initialization complete');
 
 // Export as default and named export for compatibility
 export { API };

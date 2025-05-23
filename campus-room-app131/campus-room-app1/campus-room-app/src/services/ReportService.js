@@ -1,389 +1,227 @@
-// src/services/ReportService.js
 import API from '../api';
+import ReservationEmailService from './ReservationEmailService';
+import { generateId } from '../utils/helpers';
 
 /**
- * Service for handling report data operations
- * Improved with better database connectivity and real-time updates
+ * Enhanced Service for handling report data operations
+ * Improved for better compatibility with backend
  */
 class ReportService {
+  constructor() {
+    // Setup event listeners for data changes from other components
+    this.setupEventListeners();
+    this.cacheExpiryTime = 5 * 60 * 1000; // 5 minutes cache validity
+    this.dataCache = {
+      dashboardStats: { data: null, timestamp: 0 },
+      popularRooms: { data: null, timestamp: 0 },
+      activeUsers: { data: null, timestamp: 0 },
+      monthlyActivity: { data: null, timestamp: 0 },
+      allReservations: { data: null, timestamp: 0 },
+      usersByRole: { data: null, timestamp: 0 }
+    };
+  }
+
   /**
-   * Fetch dashboard statistics for reports directly from the database
-   * @returns {Promise<Object>} Dashboard statistics
+   * Setup event listeners to catch data updates from other components
    */
-  async getDashboardStats() {
+  setupEventListeners() {
+    // Listen for reservation changes
+    document.addEventListener('reservation-updated', this.handleReservationUpdate.bind(this));
+    document.addEventListener('reservation-created', this.handleReservationUpdate.bind(this));
+    document.addEventListener('reservation-cancelled', this.handleReservationUpdate.bind(this));
+    
+    // Listen for user changes
+    document.addEventListener('user-created', this.handleUserUpdate.bind(this));
+    document.addEventListener('user-updated', this.handleUserUpdate.bind(this));
+    
+    // Listen for room changes
+    document.addEventListener('room-updated', this.handleRoomUpdate.bind(this));
+    
+    // Process queued emails when reports are accessed
+    this.processQueuedEmails();
+  }
+
+  /**
+   * Process any queued emails that couldn't be sent previously
+   */
+  async processQueuedEmails() {
     try {
-      // Make a direct API call to get fresh data
-      const response = await API.get('/admin/dashboard/stats');
-      
-      // Dispatch an event to notify components of data update
-      this._dispatchDataUpdateEvent('stats-updated');
-      
-      return response.data;
+      const result = await ReservationEmailService.processEmailQueue();
+      if (result && result.success > 0) {
+        console.log(`Processed ${result.success} queued emails when loading reports`);
+      }
+      return result;
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-      
-      // Fallback: Try ReportsAPI if available in the API object
-      try {
-        if (API.reportsAPI && API.reportsAPI.getDashboardStats) {
-          const response = await API.reportsAPI.getDashboardStats();
-          return response.data;
-        }
-      } catch (fallbackError) {
-        console.error('Fallback stats fetch failed:', fallbackError);
-      }
-      
-      // Final fallback: try to combine data from multiple endpoints
-      try {
-        const promises = [
-          API.get('/rooms/classrooms').catch(() => ({ data: [] })),
-          API.get('/rooms/study-rooms').catch(() => ({ data: [] })),
-          API.get('/reservations').catch(() => ({ data: [] })),
-          API.get('/users').catch(() => ({ data: [] }))
-        ];
-        
-        const [classroomsRes, studyRoomsRes, reservationsRes, usersRes] = await Promise.all(promises);
-        
-        const classrooms = classroomsRes.data || [];
-        const studyRooms = studyRoomsRes.data || [];
-        const reservations = reservationsRes.data || [];
-        const users = usersRes.data || [];
-        
-        // Calculate statistics from the raw data
-        const activeReservations = reservations.filter(r => r.status === 'APPROVED').length;
-        const pendingReservations = reservations.filter(r => r.status === 'PENDING').length;
-        const professorReservations = reservations.filter(r => r.role?.toLowerCase() === 'professor').length;
-        const studentReservations = reservations.filter(r => r.role?.toLowerCase() === 'student').length;
-        
-        const lectureHalls = classrooms.filter(c => c.type === 'Lecture Hall').length;
-        const regularClassrooms = classrooms.filter(c => c.type === 'Classroom').length;
-        const computerLabs = classrooms.filter(c => c.type === 'Computer Lab').length;
-        
-        // Return formatted stats
-        return {
-          totalClassrooms: classrooms.length,
-          totalStudyRooms: studyRooms.length,
-          totalReservations: reservations.length,
-          activeReservations,
-          pendingReservations,
-          rejectedReservations: reservations.filter(r => r.status === 'REJECTED').length,
-          professorReservations,
-          studentReservations,
-          totalUsers: users.length,
-          classroomBreakdown: `${lectureHalls} lecture halls, ${regularClassrooms} classrooms, ${computerLabs} labs`,
-          reservationBreakdown: `${professorReservations} by professors, ${studentReservations} by students`
-        };
-      } catch (multiError) {
-        console.error('Multi-endpoint stats gathering failed:', multiError);
-        throw error; // Throw the original error
-      }
+      console.error('Error processing email queue in ReportService:', error);
+      return { success: 0, failed: 0 };
     }
   }
 
   /**
-   * Fetch full reports data from the database for admin reports page
-   * @returns {Promise<Object>} Complete reports data
+   * Handle reservation update event from other components
    */
-  async getReportsData() {
-    try {
-      // Try the dedicated endpoint for comprehensive report data
-      const response = await API.get('/admin/reports');
-      
-      // Notify components of data update
-      this._dispatchDataUpdateEvent('reports-updated');
-      
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching reports data:', error);
-      
-      // Try alternative endpoint if available
-      try {
-        if (API.reportsAPI && API.reportsAPI.getReportsData) {
-          const response = await API.reportsAPI.getReportsData();
-          return response.data;
-        }
-      } catch (alternativeError) {
-        console.error('Alternative endpoint failed:', alternativeError);
-      }
-      
-      // Fallback: try to calculate the data from multiple endpoints
-      try {
-        // Gather all necessary data
-        const promises = [
-          API.get('/rooms/classrooms').catch(() => ({ data: [] })),
-          API.get('/rooms/study-rooms').catch(() => ({ data: [] })),
-          API.get('/reservations').catch(() => ({ data: [] })),
-          API.get('/users').catch(() => ({ data: [] }))
-        ];
-        
-        const [classroomsRes, studyRoomsRes, reservationsRes, usersRes] = await Promise.all(promises);
-        
-        const classrooms = classroomsRes.data || [];
-        const studyRooms = studyRoomsRes.data || [];
-        const reservations = reservationsRes.data || [];
-        const users = usersRes.data || [];
-        
-        // Calculate statistics
-        const stats = this._calculateStats(classrooms, studyRooms, reservations, users);
-        
-        // Calculate popular rooms
-        const popularRooms = this._calculatePopularRooms(reservations);
-        
-        // Calculate most active users
-        const mostActiveUsers = this._calculateActiveUsers(reservations, users);
-        
-        // Calculate monthly activity
-        const monthlyActivity = this._calculateMonthlyActivity(reservations);
-        
-        return {
-          statistics: stats,
-          popularRooms,
-          activeUsers: mostActiveUsers,
-          monthlyActivity
-        };
-      } catch (fallbackError) {
-        console.error('Fallback reports data gathering failed:', fallbackError);
-        throw error; // Throw the original error
-      }
+  handleReservationUpdate(event) {
+    console.log('ReportService detected reservation update', event.detail);
+    // Invalidate relevant caches
+    this.invalidateCache('dashboardStats');
+    this.invalidateCache('popularRooms');
+    this.invalidateCache('monthlyActivity');
+    this.invalidateCache('allReservations');
+  }
+
+  /**
+   * Handle user update event from other components
+   */
+  handleUserUpdate(event) {
+    console.log('ReportService detected user update', event.detail);
+    // Invalidate relevant caches
+    this.invalidateCache('dashboardStats');
+    this.invalidateCache('activeUsers');
+    this.invalidateCache('usersByRole');
+  }
+
+  /**
+   * Handle room update event from other components
+   */
+  handleRoomUpdate(event) {
+    console.log('ReportService detected room update', event.detail);
+    // Invalidate relevant caches
+    this.invalidateCache('dashboardStats');
+    this.invalidateCache('popularRooms');
+  }
+
+  /**
+   * Invalidate a specific cache
+   */
+  invalidateCache(cacheKey) {
+    if (this.dataCache[cacheKey]) {
+      this.dataCache[cacheKey].timestamp = 0;
     }
   }
-  
+
   /**
-   * Fetch specific report data by type directly from the database
-   * @param {string} reportType - Type of report to fetch (e.g., 'popular-rooms', 'active-users')
-   * @returns {Promise<Object>} Report data for the specified type
+   * Check if cache is valid for a specific key
    */
-  async getSpecificReport(reportType) {
-    try {
-      // Validate report type
-      const validReportTypes = ['popular-rooms', 'active-users', 'monthly-activity'];
-      if (!validReportTypes.includes(reportType)) {
-        throw new Error(`Invalid report type: ${reportType}`);
-      }
-      
-      // Convert report type to API endpoint format
-      const endpoint = `/admin/reports/${reportType}`;
-      
-      // Make API call to get report data
-      const response = await API.get(endpoint);
-      return response.data;
-    } catch (error) {
-      console.error(`Error fetching ${reportType} report:`, error);
-      
-      // Try alternative endpoint if available
-      try {
-        if (API.reportsAPI) {
-          // Convert report type to method name (e.g., 'popular-rooms' -> 'getPopularRooms')
-          const methodName = 'get' + reportType.split('-').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join('');
-          
-          if (API.reportsAPI[methodName]) {
-            const response = await API.reportsAPI[methodName]();
-            return response.data;
-          }
-        }
-      } catch (alternativeError) {
-        console.error('Alternative endpoint failed:', alternativeError);
-      }
-      
-      // Fallback to recalculating the specific report
-      try {
-        // Get all reservations
-        const reservationsResponse = await API.get('/reservations');
-        const reservations = reservationsResponse.data || [];
-        
-        // Get all users if needed
-        let users = [];
-        if (reportType === 'active-users') {
-          const usersResponse = await API.get('/users');
-          users = usersResponse.data || [];
-        }
-        
-        // Calculate and return the specific report
-        switch (reportType) {
-          case 'popular-rooms':
-            return this._calculatePopularRooms(reservations);
-          case 'active-users':
-            return this._calculateActiveUsers(reservations, users);
-          case 'monthly-activity':
-            return this._calculateMonthlyActivity(reservations);
-          default:
-            throw new Error('Invalid report type');
-        }
-      } catch (fallbackError) {
-        console.error('Fallback calculation failed:', fallbackError);
-        throw error; // Throw the original error
-      }
-    }
+  isCacheValid(cacheKey) {
+    const cache = this.dataCache[cacheKey];
+    if (!cache || !cache.data) return false;
+    
+    const now = Date.now();
+    return (now - cache.timestamp) < this.cacheExpiryTime;
   }
-  
+
   /**
-   * Calculate basic statistics from raw data
-   * @private
+   * Update cache for a specific key
    */
-  _calculateStats(classrooms, studyRooms, reservations, users) {
-    const totalReservations = reservations.length;
-    const approvedReservations = reservations.filter(r => r.status === 'APPROVED').length;
-    const pendingReservations = reservations.filter(r => r.status === 'PENDING').length;
-    const rejectedReservations = reservations.filter(r => r.status === 'REJECTED').length;
-    
-    const professorReservations = reservations.filter(r => r.role?.toLowerCase() === 'professor').length;
-    const studentReservations = reservations.filter(r => r.role?.toLowerCase() === 'student').length;
-    
-    return {
-      totalReservations,
-      approvedReservations,
-      pendingReservations,
-      rejectedReservations,
-      professorReservations,
-      studentReservations,
-      totalClassrooms: classrooms.length,
-      totalStudyRooms: studyRooms.length,
-      totalUsers: users.length
+  updateCache(cacheKey, data) {
+    this.dataCache[cacheKey] = {
+      data,
+      timestamp: Date.now()
     };
   }
-  
+
   /**
-   * Calculate popular rooms statistics
-   * @private
+   * Fetch dashboard statistics with improved caching
+   * @param {boolean} forceRefresh - Force refresh from server
+   * @returns {Promise<Object>} Dashboard statistics
    */
-  _calculatePopularRooms(reservations) {
-    // Count reservations by room
-    const roomCounts = {};
-    reservations.forEach(res => {
-      const roomName = res.classroom || res.room || 'Unknown';
-      roomCounts[roomName] = (roomCounts[roomName] || 0) + 1;
-    });
-    
-    // Convert to array and sort
-    const totalReservations = reservations.length || 1; // Avoid division by zero
-    const popularRooms = Object.entries(roomCounts).map(([room, count]) => ({
-      room,
-      count,
-      percentage: (count / totalReservations) * 100
-    })).sort((a, b) => b.count - a.count).slice(0, 5);
-    
-    return popularRooms;
-  }
-  
-  /**
-   * Calculate most active users
-   * @private
-   */
-  _calculateActiveUsers(reservations, users) {
-    // Count reservations by user
-    const userCounts = {};
-    reservations.forEach(res => {
-      const userId = res.userId || res.reservedBy || 'Unknown';
-      userCounts[userId] = (userCounts[userId] || 0) + 1;
-    });
-    
-    // Map user IDs to names and roles
-    const userIdToDetails = {};
-    users.forEach(user => {
-      const userId = user.id || user.email || 'Unknown';
-      userIdToDetails[userId] = {
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || userId,
-        role: user.role || 'Unknown'
-      };
-    });
-    
-    // Convert to array and sort
-    const activeUsers = Object.entries(userCounts).map(([userId, count]) => {
-      const userDetails = userIdToDetails[userId] || { 
-        userName: userId, 
-        role: 'Unknown' 
-      };
+  async getDashboardStats(forceRefresh = false) {
+    // Use cache if available and not forcing refresh
+    if (!forceRefresh && this.isCacheValid('dashboardStats')) {
+      console.log('Using cached dashboard stats');
+      return this.dataCache.dashboardStats.data;
+    }
+
+    try {
+      // Use the reportsAPI to get the data
+      const response = await API.reportsAPI.getDashboardStats(forceRefresh);
+      const stats = response.data;
       
-      return {
-        userId,
-        userName: userDetails.userName,
-        role: userDetails.role,
-        count
-      };
-    }).sort((a, b) => b.count - a.count).slice(0, 5);
-    
-    return activeUsers;
-  }
-  
-  /**
-   * Calculate monthly activity
-   * @private
-   */
-  _calculateMonthlyActivity(reservations) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    // Initialize counts for each month
-    const monthlyStats = months.map(month => ({
-      month,
-      professorCount: 0,
-      studentCount: 0,
-      total: 0
-    }));
-    
-    // Count reservations by month and role
-    reservations.forEach(res => {
-      if (!res.date) return;
+      // Update cache
+      this.updateCache('dashboardStats', stats);
       
-      try {
-        const date = new Date(res.date);
-        const monthIndex = date.getMonth();
-        
-        if (res.role?.toLowerCase() === 'professor') {
-          monthlyStats[monthIndex].professorCount++;
-        } else if (res.role?.toLowerCase() === 'student') {
-          monthlyStats[monthIndex].studentCount++;
-        }
-        
-        monthlyStats[monthIndex].total++;
-      } catch (e) {
-        console.error('Error parsing date:', res.date, e);
+      // Dispatch an event to notify components of data update
+      this.dispatchDataUpdateEvent('stats-updated');
+      
+      return stats;
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch full reports data for admin reports page
+   * @param {boolean} forceRefresh - Force refresh from server
+   * @returns {Promise<Object>} Complete reports data
+   */
+  async getReportsData(forceRefresh = false) {
+    try {
+      // Use the reportsAPI to get the data
+      const response = await API.reportsAPI.getReportsData(forceRefresh);
+      const reportData = response.data;
+      
+      // Ensure adminCount exists in monthlyActivity data
+      if (reportData.monthlyActivity) {
+        reportData.monthlyActivity = reportData.monthlyActivity.map(month => ({
+          ...month,
+          adminCount: month.adminCount !== undefined ? month.adminCount : 0
+        }));
       }
-    });
-    
-    return monthlyStats;
+      
+      // Ensure role information in activeUsers data
+      if (reportData.activeUsers) {
+        reportData.activeUsers = reportData.activeUsers.map(user => ({
+          ...user,
+          userName: user.userName || "Unknown User",
+          role: user.role || "Unknown Role"
+        }));
+      }
+      
+      // Ensure percentage in popularRooms data
+      if (reportData.popularRooms) {
+        reportData.popularRooms = reportData.popularRooms.map(room => ({
+          ...room,
+          percentage: room.percentage !== undefined ? room.percentage : 0,
+          // Ensure roleData exists
+          roleData: room.roleData || { professor: 0, student: 0, admin: 0, unknown: 0 }
+        }));
+      }
+      
+      // Update caches
+      this.updateCache('dashboardStats', reportData.statistics);
+      this.updateCache('popularRooms', reportData.popularRooms);
+      this.updateCache('activeUsers', reportData.activeUsers);
+      this.updateCache('monthlyActivity', reportData.monthlyActivity);
+      
+      // Notify components of data update
+      this.dispatchDataUpdateEvent('reports-updated');
+      
+      return reportData;
+    } catch (error) {
+      console.error('Error fetching reports data:', error);
+      throw error;
+    }
   }
-  
+
   /**
-   * Generate CSV report of all reservations from the database
+   * Generate CSV report of all reservations
    * @returns {Promise<string>} CSV content as string
    */
   async generateCSVReport() {
     try {
-      // Try to get the CSV directly from the API
-      try {
-        const response = await API.get('/admin/reports/csv', {
-          responseType: 'text'
-        });
-        return response.data;
-      } catch (directError) {
-        console.error('Direct CSV fetch failed:', directError);
-      }
+      // Use the reportsAPI to get CSV data
+      const response = await API.reportsAPI.exportCsv();
       
-      // Try alternative endpoint if available
-      try {
-        if (API.reportsAPI && API.reportsAPI.getCSVReport) {
-          const response = await API.reportsAPI.getCSVReport();
-          return response.data;
-        }
-      } catch (alternativeError) {
-        console.error('Alternative CSV endpoint failed:', alternativeError);
-      }
-      
-      // Fallback: Generate CSV from raw data
-      // Get all reservations from API
-      const response = await API.get('/reservations');
-      const reservations = response.data;
-      
-      // Create CSV header
-      let csvContent = 'ID,Room,User,User Type,Date,Time,Purpose,Status\n';
-      
-      // Add rows
-      reservations.forEach(res => {
-        csvContent += `${res.id || ''},${res.classroom || res.room || ''},${res.reservedBy || ''},${res.role || ''},${res.date || ''},${res.time || ''},${this._escapeCsvField(res.purpose) || ''},${res.status || ''}\n`;
+      // Convert blob to text
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(response.data);
       });
       
-      return csvContent;
+      return text;
     } catch (error) {
       console.error('Error generating CSV report:', error);
       throw error;
@@ -391,91 +229,57 @@ class ReportService {
   }
   
   /**
-   * Escape special characters in CSV fields
-   * @private
-   */
-  _escapeCsvField(field) {
-    if (!field) return '';
-    // Escape quotes and wrap in quotes if the field contains commas, quotes, or newlines
-    const escaped = field.toString().replace(/"/g, '""');
-    if (escaped.includes(',') || escaped.includes('"') || escaped.includes('\n')) {
-      return `"${escaped}"`;
-    }
-    return escaped;
-  }
-  
-  /**
    * Generate Excel report with comprehensive data
-   * @returns {Promise<Blob>} Excel file as blob
+   * @returns {Promise<Object>} Excel data object for client-side generation
    */
-  async generateExcelReport() {
+  async generateExcelData() {
     try {
-      // Try to get the Excel file directly from the API
-      const response = await API.get('/admin/reports/excel', {
-        responseType: 'blob'
-      });
-      return response.data;
+      // Get data for Excel report
+      const data = await this.getReportsData(true);
+      
+      // Format the data for Excel - with handling for null/undefined values
+      return {
+        statistics: data.statistics || {},
+        popularRooms: data.popularRooms || [],
+        activeUsers: data.activeUsers || [],
+        monthlyActivity: data.monthlyActivity || [],
+        usersByRole: data.usersByRole || {
+          adminCount: 0,
+          professorCount: 0,
+          studentCount: 0,
+          otherCount: 0,
+          totalCount: 0
+        },
+        reservations: []  // This can be populated as needed
+      };
     } catch (error) {
-      console.error('Error generating Excel report:', error);
+      console.error('Error generating Excel data:', error);
       throw error;
     }
   }
   
   /**
    * Generate PDF report with comprehensive data
-   * @returns {Promise<Blob>} PDF file as blob
+   * @returns {Promise<Object>} PDF data object for client-side generation
    */
-  async generatePDFReport() {
+  async generatePDFData() {
     try {
-      // Try to get the PDF file directly from the API
-      const response = await API.get('/admin/reports/pdf', {
-        responseType: 'blob'
-      });
-      return response.data;
+      // Use the reportsAPI to get PDF data
+      const response = await API.reportsAPI.getPdfData();
+      const pdfData = response.data;
+      
+      return pdfData;
     } catch (error) {
-      console.error('Error generating PDF report:', error);
+      console.error('Error generating PDF data:', error);
       throw error;
     }
   }
   
   /**
-   * Register event handler for report data updates
-   * @param {Function} handler - Function to call when data is updated
-   * @returns {Function} Function to unregister the handler
-   */
-  onDataUpdate(handler) {
-    if (typeof handler !== 'function') {
-      throw new Error('Handler must be a function');
-    }
-    
-    // Add event listeners for all update events
-    const eventTypes = [
-      'stats-updated',
-      'reports-updated',
-      'reservation-updated',
-      'user-created',
-      'room-updated'
-    ];
-    
-    // Register handler for each event type
-    eventTypes.forEach(eventType => {
-      window.addEventListener(eventType, handler);
-    });
-    
-    // Return function to remove event listeners
-    return () => {
-      eventTypes.forEach(eventType => {
-        window.removeEventListener(eventType, handler);
-      });
-    };
-  }
-  
-  /**
    * Dispatch custom event to notify of data updates
    * @param {string} eventType - Type of update event
-   * @private
    */
-  _dispatchDataUpdateEvent(eventType) {
+  dispatchDataUpdateEvent(eventType) {
     const event = new CustomEvent(eventType, {
       detail: {
         timestamp: new Date().toISOString(),
@@ -483,32 +287,9 @@ class ReportService {
       }
     });
     
-    window.dispatchEvent(event);
-  }
-  
-  /**
-   * Notify that a reservation has been updated
-   * Used by other services to trigger report updates
-   */
-  notifyReservationUpdated() {
-    this._dispatchDataUpdateEvent('reservation-updated');
-  }
-  
-  /**
-   * Notify that a user has been created or updated
-   * Used by other services to trigger report updates
-   */
-  notifyUserUpdated() {
-    this._dispatchDataUpdateEvent('user-created');
-  }
-  
-  /**
-   * Notify that a room has been updated
-   * Used by other services to trigger report updates
-   */
-  notifyRoomUpdated() {
-    this._dispatchDataUpdateEvent('room-updated');
+    document.dispatchEvent(event);
   }
 }
 
+// Export a singleton instance
 export default new ReportService();

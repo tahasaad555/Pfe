@@ -2041,8 +2041,6 @@ const studyRoomGridStyles = `
   padding-left: 20px;
   font-size: 0.85rem;
 }
-// Add this to your component or in your styles/dashboard.css file
-const selectedRoomImageStyles = `
 .selected-study-room-info {
   display: flex;
   flex-direction: column;
@@ -2100,7 +2098,209 @@ const selectedRoomImageStyles = `
   font-size: 0.7rem;
   font-weight: bold;
 }
+/* Add these styles to your dashboard.css file */
 
+/* Image Viewer Component Styles */
+.image-viewer-preview {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.image-viewer-preview:hover {
+  transform: scale(1.03);
+}
+
+.image-viewer-preview:hover .zoom-icon {
+  opacity: 1;
+}
+
+.zoom-icon {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #333;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Overlay for the large image view */
+.image-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.image-viewer-content {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.image-viewer-content img {
+  border-radius: 4px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-viewer-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #333;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  cursor: pointer;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.image-viewer-close:hover {
+  background-color: white;
+  transform: scale(1.1);
+}
+
+/* Enhanced image preview in the form */
+.image-preview {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 6px;
+  background-color: #f5f5f5;
+  text-align: center;
+  border: 1px dashed #ccc;
+  cursor: pointer;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+/* Add these styles to your dashboard.css file */
+
+/* Classroom image styles */
+.classroom-image {
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+  background-color: #f5f5f5;
+}
+
+.classroom-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.classroom-image img:hover {
+  transform: scale(1.05);
+}
+
+/* Selected classroom image */
+.selected-classroom-image {
+  width: 100%;
+  max-height: 240px;
+  overflow: hidden;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.selected-classroom-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Classroom card styles */
+.classroom-card {
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.classroom-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.classroom-card.selected {
+  border: 2px solid #4CAF50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
+}
+
+/* Table image preview */
+.table-image-preview {
+  width: 50px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+}
+
+.table-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Image error styles */
+.image-error {
+  background-color: #f8f8f8;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  height: 100%;
+}
 /* Ensure nav items can position the badge properly */
 .nav-item {
   position: relative;
@@ -2292,5 +2492,233 @@ const selectedRoomImageStyles = `
   .branch-actions .btn-danger {
     flex: 1;
     justify-content: center;
+  }
+}
+/* Add these styles to your existing dashboard.css */
+
+.conflict-warning {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 4px;
+  border-left: 4px solid #f6ad55;
+  background-color: #fffbeb;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.conflict-warning i {
+  color: #f6ad55;
+  margin-top: 3px;
+}
+
+.classroom-conflict {
+  border-left: 4px solid #e53e3e;
+  background-color: rgba(229, 62, 62, 0.1);
+}
+
+.classroom-conflict i {
+  color: #e53e3e;
+}
+
+.classroom-conflict-text {
+  color: #e53e3e;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+/* Styles for classroom conflict highlighting in the timetable visualization */
+.timetable-entry.has-conflict {
+  box-shadow: 0 0 0 2px #e53e3e, 0 0 8px rgba(229, 62, 62, 0.5);
+  animation: pulse-conflict 2s infinite;
+}
+
+.conflict-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background-color: #e53e3e;
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+@keyframes pulse-conflict {
+  0% { box-shadow: 0 0 0 2px #e53e3e, 0 0 4px rgba(229, 62, 62, 0.5); }
+  50% { box-shadow: 0 0 0 2px #e53e3e, 0 0 8px rgba(229, 62, 62, 0.8); }
+  100% { box-shadow: 0 0 0 2px #e53e3e, 0 0 4px rgba(229, 62, 62, 0.5); }
+}
+/* Perfect Circular Avatar Styles for SideNav */
+
+/* User Profile Section */
+.user-profile {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Avatar Container - Perfect Circle */
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 1rem;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Image Container - Ensures perfect circular crop */
+.avatar-image-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  background-color: #f0f0f0;
+}
+
+/* Avatar Image - Perfect fit and crop */
+.avatar-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 50% !important;
+  display: block !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  border: none !important;
+  outline: none !important;
+}
+
+/* Initials fallback */
+.user-initials {
+  color: white;
+  font-weight: 600;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* User Info */
+.user-info {
+  flex: 1;
+  min-width: 0; /* Prevents text overflow */
+}
+
+.user-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: #666;
+  text-transform: capitalize;
+}
+
+/* For dark theme sidebars */
+.sidebar-nav.dark .user-name {
+  color: #fff;
+}
+
+.sidebar-nav.dark .user-role {
+  color: #ccc;
+}
+
+/* Ensure LocalImage component doesn't interfere */
+.avatar-image-container .local-image-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+/* Loading state for avatar */
+.avatar-image-container::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.avatar-image-container.loading::before {
+  opacity: 1;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .user-profile {
+    padding: 0.75rem;
+  }
+  
+  .user-avatar {
+    width: 40px;
+    height: 40px;
+    margin-right: 0.75rem;
+  }
+  
+  .user-initials {
+    font-size: 1rem;
+  }
+  
+  .user-name {
+    font-size: 0.9rem;
+  }
+  
+  .user-role {
+    font-size: 0.75rem;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .user-avatar {
+    width: 35px;
+    height: 35px;
+    margin-right: 0.5rem;
+  }
+  
+  .user-initials {
+    font-size: 0.9rem;
   }
 }

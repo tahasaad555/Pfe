@@ -1,26 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import Table from '../common/Table';
 import Modal from '../common/Modal';
+import LocalImage from '../common/LocalImage';
+import ImageViewer from '../common/ImageViewer';
+import LocalImageUploader from '../common/LocalImageUploader';
+import LocalImageService from '../../utils/LocalImageService';
 import '../../styles/dashboard.css';
 import API from '../../api'; 
 
 const AdminClassrooms = () => {
   const [classrooms, setClassrooms] = useState([]);
-  const [studyRooms, setStudyRooms] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' or 'edit'
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [roomType, setRoomType] = useState('classroom'); // 'classroom' or 'studyRoom'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Images par défaut disponibles
-  const defaultImages = [
-    { value: '/images/classroom-default.jpg', label: 'Salle de classe standard' },
-    { value: '/images/lecture-hall.jpg', label: 'Amphithéâtre' },
-    { value: '/images/computer-lab.jpg', label: 'Laboratoire informatique' },
-    { value: '/images/conference-room.jpg', label: 'Salle de conférence' }
-  ];
   
   // État du formulaire
   const [formData, setFormData] = useState({
@@ -30,7 +25,7 @@ const AdminClassrooms = () => {
     capacity: '',
     features: '',
     availableTimes: '',
-    image: ''
+    image: '/images/classrooms/classroom-default.jpg' // Default image path
   });
   
   // Charger les salles depuis l'API au montage du composant
@@ -42,11 +37,7 @@ const AdminClassrooms = () => {
         const classroomsResponse = await API.get('/api/rooms/classrooms');
         console.log("Classrooms response:", classroomsResponse);
         setClassrooms(classroomsResponse.data);
-        
-        const studyRoomsResponse = await API.get('/api/rooms/study-rooms');
-        console.log("Study rooms response:", studyRoomsResponse);
-        setStudyRooms(studyRoomsResponse.data);
-        
+    
         setError(null);
       } catch (err) {
         console.error("Error fetching rooms:", err);
@@ -54,10 +45,8 @@ const AdminClassrooms = () => {
         
         // Fallback to localStorage if API fails
         const storedClassrooms = JSON.parse(localStorage.getItem('availableClassrooms') || '[]');
-        const storedStudyRooms = JSON.parse(localStorage.getItem('studyRooms') || '[]');
         
         setClassrooms(storedClassrooms);
-        setStudyRooms(storedStudyRooms);
       } finally {
         setLoading(false);
       }
@@ -83,8 +72,8 @@ const AdminClassrooms = () => {
     });
   };
   
-  // Gérer la sélection d'image
-  const handleImageChange = (e) => {
+  // Handle image selection from the uploader
+  const handleImageSelect = (e) => {
     setFormData({
       ...formData,
       image: e.target.value
@@ -102,7 +91,7 @@ const AdminClassrooms = () => {
       capacity: '',
       features: '',
       availableTimes: '8AM - 9PM',
-      image: type === 'classroom' ? '/images/classroom-default.jpg' : '/images/study-room.jpg'
+      image: '/images/classrooms/classroom-default.jpg' // Default image
     });
     setShowModal(true);
   };
@@ -120,19 +109,9 @@ const AdminClassrooms = () => {
         type: room.type || '',
         capacity: room.capacity || '',
         features: Array.isArray(room.features) ? room.features.join(', ') : (room.features || ''),
-        image: room.image || '/images/classroom-default.jpg'
+        image: room.image || '/images/classrooms/classroom-default.jpg'
       });
-    } else {
-      setFormData({
-        id: room.id || '',
-        name: room.name || '',
-        type: room.type || '',
-        capacity: room.capacity || '',
-        features: Array.isArray(room.features) ? room.features.join(', ') : (room.features || ''),
-        availableTimes: room.availableTimes || '',
-        image: room.image || '/images/study-room.jpg'
-      });
-    }
+    } 
     
     setShowModal(true);
   };
@@ -144,8 +123,6 @@ const AdminClassrooms = () => {
     try {
       if (roomType === 'classroom') {
         await handleClassroomSubmit();
-      } else {
-        await handleStudyRoomSubmit();
       }
       
       setShowModal(false);
@@ -155,40 +132,54 @@ const AdminClassrooms = () => {
     }
   };
   
-  // Gérer la soumission du formulaire pour les salles de classe
-  const handleClassroomSubmit = async () => {
-    const featuresList = formData.features.split(',').map(feature => feature.trim());
-    
-    // Format selon la structure ClassroomDTO de votre backend Java
-    const classroomData = {
-      id: formData.id || null, // utiliser null au lieu de undefined pour un nouveau classroom
-      roomNumber: formData.name,
-      type: formData.type,
-      capacity: parseInt(formData.capacity),
-      features: featuresList,
-      image: formData.image // Inclure l'image dans les données
-    };
-    
-    console.log("Données envoyées:", classroomData); // Pour debug
-    
-    if (modalMode === 'add') {
-      try {
-        // Utiliser l'API directement
-        const response = await API.post('/api/rooms/classrooms', classroomData);
-        console.log("Réponse du backend après création:", response.data);
-        
-        const newClassroom = response.data;
-        setClassrooms([...classrooms, newClassroom]);
-        
-        // Also update localStorage as backup
-        const updatedClassrooms = [...classrooms, newClassroom];
-        localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
-        
-        alert('Classroom added successfully.');
-      } catch (err) {
-        console.error("API error details:", err.response || err);
-        
-        // Fallback: add to localStorage only
+ // Replace the handleClassroomSubmit method in AdminClassrooms.js with this improved version:
+
+const handleClassroomSubmit = async () => {
+  const featuresList = formData.features.split(',').map(feature => feature.trim());
+  
+  // Format selon la structure ClassroomDTO de votre backend Java
+  const classroomData = {
+    id: formData.id || null,
+    roomNumber: formData.name,
+    type: formData.type,
+    capacity: parseInt(formData.capacity),
+    features: featuresList,
+    image: formData.image
+  };
+  
+  console.log("Données envoyées:", classroomData);
+  
+  if (modalMode === 'add') {
+    try {
+      const response = await API.post('/api/rooms/classrooms', classroomData);
+      console.log("Réponse du backend après création:", response.data);
+      
+      const newClassroom = response.data;
+      setClassrooms([...classrooms, newClassroom]);
+      
+      // Also update localStorage as backup
+      const updatedClassrooms = [...classrooms, newClassroom];
+      localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
+      
+      alert('Classroom added successfully.');
+    } catch (err) {
+      console.error("API error details:", err.response || err);
+      
+      // Check if it's a validation error from the backend
+      if (err.response && err.response.status === 400 && err.response.data && err.response.data.message) {
+        // This is a validation error (like duplicate room number)
+        alert(`Error: ${err.response.data.message}`);
+        return; // Don't fall back to localStorage for validation errors
+      }
+      
+      // Check for other client errors (401, 403, etc.)
+      if (err.response && err.response.status >= 400 && err.response.status < 500) {
+        alert(`Error: ${err.response.data?.message || 'Invalid request. Please check your input.'}`);
+        return;
+      }
+      
+      // Only fall back to localStorage for network/server errors
+      if (!err.response || err.response.status >= 500) {
         const newClassroom = {
           ...classroomData,
           id: `C${Date.now().toString().substr(-4)}`,
@@ -198,33 +189,45 @@ const AdminClassrooms = () => {
         setClassrooms(updatedClassrooms);
         localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
         
-        alert('Classroom added to local storage (offline mode).');
+        alert('Server unavailable. Classroom added to local storage (offline mode).');
       }
-    } else {
-      try {
-        // Utiliser l'API directement
-        const response = await API.put(`/api/rooms/classrooms/${selectedRoom.id}`, classroomData);
-        console.log("Réponse du backend après mise à jour:", response.data);
-        
-        const updatedClassroom = response.data;
-        
-        const updatedClassrooms = classrooms.map(classroom => {
-          if (classroom.id === selectedRoom.id) {
-            return updatedClassroom;
-          }
-          return classroom;
-        });
-        
-        setClassrooms(updatedClassrooms);
-        
-        // Also update localStorage as backup
-        localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
-        
-        alert('Classroom updated successfully.');
-      } catch (err) {
-        console.error("API error details:", err.response || err);
-        
-        // Fallback: update in localStorage only
+    }
+  } else {
+    // Edit mode
+    try {
+      const response = await API.put(`/api/rooms/classrooms/${selectedRoom.id}`, classroomData);
+      console.log("Réponse du backend après mise à jour:", response.data);
+      
+      const updatedClassroom = response.data;
+      
+      const updatedClassrooms = classrooms.map(classroom => {
+        if (classroom.id === selectedRoom.id) {
+          return updatedClassroom;
+        }
+        return classroom;
+      });
+      
+      setClassrooms(updatedClassrooms);
+      localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
+      
+      alert('Classroom updated successfully.');
+    } catch (err) {
+      console.error("API error details:", err.response || err);
+      
+      // Check if it's a validation error from the backend
+      if (err.response && err.response.status === 400 && err.response.data && err.response.data.message) {
+        alert(`Error: ${err.response.data.message}`);
+        return;
+      }
+      
+      // Check for other client errors
+      if (err.response && err.response.status >= 400 && err.response.status < 500) {
+        alert(`Error: ${err.response.data?.message || 'Invalid request. Please check your input.'}`);
+        return;
+      }
+      
+      // Only fall back to localStorage for network/server errors
+      if (!err.response || err.response.status >= 500) {
         const updatedClassrooms = classrooms.map(classroom => {
           if (classroom.id === selectedRoom.id) {
             return {
@@ -242,148 +245,39 @@ const AdminClassrooms = () => {
         setClassrooms(updatedClassrooms);
         localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
         
-        alert('Classroom updated in local storage (offline mode).');
+        alert('Server unavailable. Classroom updated in local storage (offline mode).');
       }
     }
-  };
-  
-  // Gérer la soumission du formulaire pour les salles d'étude
-  const handleStudyRoomSubmit = async () => {
-    const featuresList = formData.features.split(',').map(feature => feature.trim());
-    
-    const studyRoomData = {
-      id: formData.id || null, // utiliser null au lieu de undefined
-      name: formData.name,
-      type: formData.type,
-      capacity: parseInt(formData.capacity),
-      features: featuresList,
-      availableTimes: formData.availableTimes,
-      image: formData.image
-    };
-    
-    console.log("Données study room envoyées:", studyRoomData); // Pour debug
-    
-    if (modalMode === 'add') {
-      try {
-        // Utiliser l'API directement
-        const response = await API.post('/api/rooms/study-rooms', studyRoomData);
-        console.log("Réponse du backend après création:", response.data);
-        
-        const newStudyRoom = response.data;
-        setStudyRooms([...studyRooms, newStudyRoom]);
-        
-        // Also update localStorage as backup
-        const updatedStudyRooms = [...studyRooms, newStudyRoom];
-        localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        
-        alert('Study room added successfully.');
-      } catch (err) {
-        console.error("API error details:", err.response || err);
-        
-        // Fallback: add to localStorage only
-        const newStudyRoom = {
-          ...studyRoomData,
-          id: `SR${Date.now().toString().substr(-4)}`,
-        };
-        
-        const updatedStudyRooms = [...studyRooms, newStudyRoom];
-        setStudyRooms(updatedStudyRooms);
-        localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        
-        alert('Study room added to local storage (offline mode).');
-      }
-    } else {
-      try {
-        // Utiliser l'API directement
-        const response = await API.put(`/api/rooms/study-rooms/${selectedRoom.id}`, studyRoomData);
-        console.log("Réponse du backend après mise à jour:", response.data);
-        
-        const updatedStudyRoom = response.data;
-        
-        const updatedStudyRooms = studyRooms.map(room => {
-          if (room.id === selectedRoom.id) {
-            return updatedStudyRoom;
-          }
-          return room;
-        });
-        
-        setStudyRooms(updatedStudyRooms);
-        
-        // Also update localStorage as backup
-        localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        
-        alert('Study room updated successfully.');
-      } catch (err) {
-        console.error("API error details:", err.response || err);
-        
-        // Fallback: update in localStorage only
-        const updatedStudyRooms = studyRooms.map(room => {
-          if (room.id === selectedRoom.id) {
-            return {
-              ...room,
-              name: formData.name,
-              type: formData.type,
-              capacity: parseInt(formData.capacity),
-              features: featuresList,
-              availableTimes: formData.availableTimes,
-              image: formData.image
-            };
-          }
-          return room;
-        });
-        
-        setStudyRooms(updatedStudyRooms);
-        localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        
-        alert('Study room updated in local storage (offline mode).');
-      }
-    }
-  };
-  
+  }
+};
   // Gérer la suppression d'une salle
   const handleDeleteRoom = async (id, type) => {
     if (window.confirm('Are you sure you want to delete this room?')) {
       try {
+        // Find the room first to get its image
+        const roomToDelete = classrooms.find(room => room.id === id);
+        
         if (type === 'classroom') {
           // Utiliser l'API directement
           await API.delete(`/api/rooms/classrooms/${id}`);
           console.log("Classroom deleted on backend:", id);
           
+          // If the room had a localStorage image, delete it too
+          if (roomToDelete && roomToDelete.image && roomToDelete.image.startsWith('local-storage://')) {
+            LocalImageService.deleteImage(roomToDelete.image);
+          }
+          
           // Update local state
           const updatedClassrooms = classrooms.filter(classroom => classroom.id !== id);
           setClassrooms(updatedClassrooms);
           
           // Also update localStorage
           localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
-        } else {
-          // Utiliser l'API directement
-          await API.delete(`/api/rooms/study-rooms/${id}`);
-          console.log("Study room deleted on backend:", id);
-          
-          // Update local state
-          const updatedStudyRooms = studyRooms.filter(room => room.id !== id);
-          setStudyRooms(updatedStudyRooms);
-          
-          // Also update localStorage
-          localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        }
+        } 
         
         alert('Room deleted successfully.');
       } catch (err) {
         console.error("API error details:", err.response || err);
-        
-        // Fallback: delete from localStorage only
-        if (type === 'classroom') {
-          const updatedClassrooms = classrooms.filter(classroom => classroom.id !== id);
-          setClassrooms(updatedClassrooms);
-          localStorage.setItem('availableClassrooms', JSON.stringify(updatedClassrooms));
-        } else {
-          const updatedStudyRooms = studyRooms.filter(room => room.id !== id);
-          setStudyRooms(updatedStudyRooms);
-          localStorage.setItem('studyRooms', JSON.stringify(updatedStudyRooms));
-        }
-        
-        alert('Room deleted from local storage (offline mode).');
       }
     }
   };
@@ -402,11 +296,15 @@ const AdminClassrooms = () => {
     {
       header: 'Image',
       key: 'image',
-      render: (image) => image ? (
+      render: (image) => (
         <div className="table-image-preview">
-          <img src={image} alt="Classroom" width="50" height="40" style={{objectFit: 'cover'}} />
+          <ImageViewer 
+            src={image} 
+            alt="Classroom" 
+            previewStyle={{width: '50px', height: '40px'}}
+          />
         </div>
-      ) : 'No Image'
+      )
     },
     {
       header: 'Actions',
@@ -422,49 +320,6 @@ const AdminClassrooms = () => {
           <button 
             className="btn-table btn-delete"
             onClick={() => handleDeleteRoom(id, 'classroom')}
-          >
-            Delete
-          </button>
-        </div>
-      )
-    }
-  ];
-  
-  // Colonnes pour la table des salles d'étude
-  const studyRoomColumns = [
-    { header: 'ID', key: 'id' },
-    { header: 'Room Name', key: 'name' },
-    { header: 'Type', key: 'type' },
-    { header: 'Capacity', key: 'capacity' },
-    { 
-      header: 'Features', 
-      key: 'features',
-      render: (features) => Array.isArray(features) ? features.join(', ') : features
-    },
-    { header: 'Available Times', key: 'availableTimes' },
-    {
-      header: 'Image',
-      key: 'image',
-      render: (image) => image ? (
-        <div className="table-image-preview">
-          <img src={image} alt="Study Room" width="50" height="40" style={{objectFit: 'cover'}} />
-        </div>
-      ) : 'No Image'
-    },
-    {
-      header: 'Actions',
-      key: 'id',
-      render: (id, room) => (
-        <div className="table-actions">
-          <button 
-            className="btn-table btn-edit"
-            onClick={() => openEditModal(room, 'studyRoom')}
-          >
-            Edit
-          </button>
-          <button 
-            className="btn-table btn-delete"
-            onClick={() => handleDeleteRoom(id, 'studyRoom')}
           >
             Delete
           </button>
@@ -496,29 +351,6 @@ const AdminClassrooms = () => {
             columns={classroomColumns}
             data={classrooms}
             emptyMessage="No classrooms found"
-          />
-        )}
-      </div>
-      
-      {/* Section des salles d'étude */}
-      <div className="section">
-        <div className="section-header">
-          <h2>Study Rooms</h2>
-          <button 
-            className="btn-primary"
-            onClick={() => openAddModal('studyRoom')}
-          >
-            <i className="fas fa-plus"></i> Add Study Room
-          </button>
-        </div>
-        
-        {loading ? (
-          <div className="loading-spinner">Loading...</div>
-        ) : (
-          <Table 
-            columns={studyRoomColumns}
-            data={studyRooms}
-            emptyMessage="No study rooms found"
           />
         )}
       </div>
@@ -596,74 +428,26 @@ const AdminClassrooms = () => {
             />
           </div>
           
-          {roomType === 'studyRoom' && (
-            <div className="form-group">
-              <label htmlFor="availableTimes">Available Times</label>
-              <input 
-                type="text" 
-                id="availableTimes" 
-                name="availableTimes"
-                value={formData.availableTimes}
-                onChange={handleChange}
-                placeholder="e.g., 8AM - 9PM"
-                required 
+          {/* Image upload - Using our custom component */}
+          <LocalImageUploader onImageSelect={handleImageSelect} />
+          
+          {/* Current image preview */}
+          <div className="form-group">
+            <label>Current Selected Image</label>
+            <div className="image-preview">
+              <ImageViewer 
+                src={formData.image} 
+                alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
+                previewStyle={{ maxWidth: '100%', height: '200px' }}
+                maxWidth="90vw"
+                maxHeight="80vh"
               />
             </div>
-          )}
-          
-          <div className="form-group">
-            <label htmlFor="image">Room Image</label>
-            <select
-              id="image"
-              name="image"
-              value={formData.image}
-              onChange={handleImageChange}
-            >
-              {roomType === 'classroom' ? (
-                <>
-                  {defaultImages.map(img => (
-                    <option key={img.value} value={img.value}>{img.label}</option>
-                  ))}
-                  <option value="/images/custom-classroom.jpg">Custom Classroom Image</option>
-                </>
-              ) : (
-                <>
-                  <option value="/images/study-room.jpg">Standard Study Room</option>
-                  <option value="/images/group-study.jpg">Group Study Room</option>
-                  <option value="/images/library-study.jpg">Library Study Space</option>
-                  <option value="/images/computer-lab.jpg">Computer Lab</option>
-                </>
-              )}
-            </select>
-          </div>
-          
-          {/* Image preview */}
-          <div className="form-group">
-            <label>Image Preview</label>
-            <div className="image-preview">
-              {formData.image ? (
-                <img 
-                  src={formData.image} 
-                  alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
-                  style={{ maxWidth: '100%', height: 'auto', maxHeight: '150px', objectFit: 'cover' }}
-                />
-              ) : (
-                <div className="no-image">No image selected</div>
-              )}
-            </div>
-          </div>
-          
-          {/* Custom URL input option */}
-          <div className="form-group">
-            <label htmlFor="custom-image">Or enter custom image URL</label>
-            <input 
-              type="text" 
-              id="custom-image" 
-              placeholder="https://example.com/image.jpg"
-              value={formData.image.startsWith('http') ? formData.image : ''}
-              onChange={(e) => setFormData({...formData, image: e.target.value})}
-            />
-            <small className="form-hint">Enter a custom URL if you want to use an external image</small>
+            <small className="form-text text-muted">
+              {formData.image && formData.image.startsWith('local-storage://') 
+                ? 'Custom uploaded image from your device' 
+                : 'Default system image'} (Click to enlarge)
+            </small>
           </div>
           
           <button type="submit" className="btn-primary">

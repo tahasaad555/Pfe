@@ -18,4 +18,5 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowCredentials(true)  // Allow credentials (important for auth)
                 .maxAge(3600);
     }
+    
 }
