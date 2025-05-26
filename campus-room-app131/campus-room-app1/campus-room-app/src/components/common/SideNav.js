@@ -25,7 +25,7 @@ const SideNav = ({
   return (
     <div className="sidebar-nav">
       <div className="sidebar-header">
-        <img src={logoSrc} alt={`${title} Logo`} className="sidebar-logo" />
+        <img src="/image/pfe-logo.png" alt={`${title} Logo`} className="sidebar-logo" />
         <h2>{title.substring(0, title.length - 4)}<span>{title.substring(title.length - 4)}</span></h2>
       </div>
       

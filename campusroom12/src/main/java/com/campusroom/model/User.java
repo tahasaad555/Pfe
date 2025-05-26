@@ -68,6 +68,10 @@ public class User {
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "updated_at")
     private Date updatedAt;
+    
+    // Add these fields to your User.java model
+private String verificationCode;
+private Date verificationCodeExpiry;
 
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "last_login")
@@ -230,4 +234,20 @@ public class User {
     public void removeTimetableEntry(TimetableEntry entry) {
         timetableEntries.remove(entry);
     }
+    // Add getters and setters
+public String getVerificationCode() {
+    return verificationCode;
+}
+
+public void setVerificationCode(String verificationCode) {
+    this.verificationCode = verificationCode;
+}
+
+public Date getVerificationCodeExpiry() {
+    return verificationCodeExpiry;
+}
+
+public void setVerificationCodeExpiry(Date verificationCodeExpiry) {
+    this.verificationCodeExpiry = verificationCodeExpiry;
+}
 }
