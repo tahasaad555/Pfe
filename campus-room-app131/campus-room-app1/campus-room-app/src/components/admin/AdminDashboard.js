@@ -5,8 +5,8 @@ import useProfileLoader from '../../hooks/useProfileLoader';
 import NotificationService from '../../services/NotificationService';
 import NotificationPanel from '../common/NotificationPanel';
 import SharedDashboardService from '../../services/SharedDashboardService'; // Import shared service
-import '../../styles/dashboard.css';
-import '../../styles/notifications.css';
+import '../../styles/unifié.css';
+
 
 // Component imports
 import SideNav from '../common/SideNav';
@@ -503,10 +503,12 @@ const AdminDashboard = () => {
                 onClick={toggleNotifications}
                 title="View notifications"
               >
-                <i className="fas fa-bell"></i>
-                {pendingNotificationCount > 0 && (
-                  <span className="header-notification-count">{pendingNotificationCount}</span>
-                )}
+                
+                  <i className="fas fa-bell"></i>
+               {showNotifications && (  // <-- We'll change this
+  <div className="notifications-container">
+    <NotificationPanel />
+  </div>)}
               </button>
             </div>
             <button 

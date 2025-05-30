@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SettingsService from '../../services/SettingsService';
-import '../../styles/dashboard.css';
+import '../../styles/unifié.css';
 
 const AdminSettings = () => {
   // States for loading and errors

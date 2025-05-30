@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import '../../styles/auth.css';
+import '../../styles/unifié.css';
 
 const ForgotPassword = () => {
   const [step, setStep] = useState(1); // 1: email, 2: verification code, 3: new password

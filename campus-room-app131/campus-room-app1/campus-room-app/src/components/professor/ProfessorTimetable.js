@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { API } from '../../api';
-import '../../styles/timetable.css';
+import '../../styles/unifié.css';
 
 const ProfessorTimetable = () => {
   const navigate = useNavigate();
@@ -25,21 +25,6 @@ const ProfessorTimetable = () => {
   
   // Days of the week
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  
-  // Class types
-  const classTypes = ['Lecture', 'Lab', 'Study Group', 'Seminar', 'Tutorial', 'Office Hours', 'Meeting'];
-  
-  // Available colors
-  const availableColors = [
-    { name: 'Indigo', value: '#6366f1' },
-    { name: 'Green', value: '#10b981' },
-    { name: 'Blue', value: '#0ea5e9' },
-    { name: 'Red', value: '#ef4444' },
-    { name: 'Purple', value: '#8b5cf6' },
-    { name: 'Orange', value: '#f59e0b' },
-    { name: 'Teal', value: '#14b8a6' },
-    { name: 'Pink', value: '#ec4899' }
-  ];
   
   // Update the useEffect hook that fetches timetable data
   useEffect(() => {
@@ -722,182 +707,7 @@ const processTimetableData = (timetableEntries) => {
     `;
   };
   
-  // Function to export schedule as iCal (.ics) file
-  const exportSchedule = async () => {
-    try {
-      // Use API to get ICS file
-      const response = await API.get('/api/timetable/my-timetable/export?format=ics', {
-        responseType: 'blob'
-      });
-      
-      // Create blob from response data
-      const blob = new Blob([response.data], { type: 'text/calendar' });
-      const url = URL.createObjectURL(blob);
-      
-      // Create download link
-      const link = document.createElement('a');
-      link.download = 'class_schedule.ics';
-      link.href = url;
-      link.click();
-      
-      // Clean up
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error exporting schedule:', error);
-      alert('Failed to export schedule. Please try again later.');
-      
-      // Fallback to client-side generation if API fails
-      let icsContent = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//CampusRoom//Professor Timetable//EN'
-      ];
-      
-      // Add each class as an event
-      daysOfWeek.forEach((day, dayIndex) => {
-        if (timetableData[day]) {
-          timetableData[day].forEach(course => {
-            const eventDate = new Date(weekDates[dayIndex]);
-            const startTime = course.startTime.split(':');
-            const endTime = course.endTime.split(':');
-            
-            const startDateTime = new Date(eventDate);
-            startDateTime.setHours(parseInt(startTime[0]), parseInt(startTime[1] || 0), 0);
-            
-            const endDateTime = new Date(eventDate);
-            endDateTime.setHours(parseInt(endTime[0]), parseInt(endTime[1] || 0), 0);
-            
-            // Format dates for iCal (YYYYMMDDTHHmmss)
-            const formatDateForICS = (d) => {
-              return d.getFullYear() + 
-                    ('0' + (d.getMonth() + 1)).slice(-2) + 
-                    ('0' + d.getDate()).slice(-2) + 'T' + 
-                    ('0' + d.getHours()).slice(-2) + 
-                    ('0' + d.getMinutes()).slice(-2) + 
-                    ('0' + d.getSeconds()).slice(-2);
-            };
-            
-            icsContent = [
-              ...icsContent,
-              'BEGIN:VEVENT',
-              `UID:${course.id}@campusroom.edu`,
-              `DTSTAMP:${formatDateForICS(new Date())}`,
-              `DTSTART:${formatDateForICS(startDateTime)}`,
-              `DTEND:${formatDateForICS(endDateTime)}`,
-              `SUMMARY:${course.name}`,
-              `LOCATION:${course.location}`,
-              `DESCRIPTION:${course.type}${course.instructor ? ' with ' + course.instructor : ''}`,
-              'END:VEVENT'
-            ];
-          });
-        }
-      });
-      
-      icsContent.push('END:VCALENDAR');
-      
-      // Create download
-      const blob = new Blob([icsContent.join('\n')], { type: 'text/calendar' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = 'class_schedule.ics';
-      link.href = url;
-      link.click();
-    }
-  };
-
-  // Function to add a new class to the timetable
-  const addNewClass = async () => {
-    // Here we would show a modal for adding a new class
-    // For now, just use the course modal with an empty course
-    setSelectedCourse({
-      id: null,
-      name: '',
-      instructor: '',
-      location: '',
-      startTime: '09:00',
-      endTime: '10:30',
-      color: '#6366f1',
-      type: 'Lecture',
-      day: 'Monday',
-      isNew: true
-    });
-    setShowCourseModal(true);
-  };
-
-  // Function to save a new or edited class
-  const saveClass = async (course) => {
-    try {
-      let response;
-      
-      if (course.isNew) {
-        // Create new class
-        delete course.isNew;
-        response = await API.post('/api/professor/timetable/class', course);
-      } else {
-        // Update existing class
-        response = await API.put(`/api/professor/timetable/class/${course.id}`, course);
-      }
-      
-      if (response && response.data && response.data.success) {
-        // Refresh the timetable data
-        const updatedTimetableData = { ...timetableData };
-        
-        if (course.isNew) {
-          // Add the new course to the timetable
-          if (!updatedTimetableData[course.day]) {
-            updatedTimetableData[course.day] = [];
-          }
-          updatedTimetableData[course.day].push(course);
-        } else {
-          // Update the existing course
-          if (updatedTimetableData[course.day]) {
-            const index = updatedTimetableData[course.day].findIndex(c => c.id === course.id);
-            if (index !== -1) {
-              updatedTimetableData[course.day][index] = course;
-            }
-          }
-        }
-        
-        setTimetableData(updatedTimetableData);
-        setShowCourseModal(false);
-      } else {
-        throw new Error('Failed to save class');
-      }
-    } catch (error) {
-      console.error('Error saving class:', error);
-      alert('Failed to save class. Please try again later.');
-    }
-  };
-
-  // Function to delete a class
-  const deleteClass = async (courseId) => {
-    if (!courseId || !window.confirm('Are you sure you want to delete this class?')) {
-      return;
-    }
-    
-    try {
-      const response = await API.delete(`/api/professor/timetable/class/${courseId}`);
-      
-      if (response && response.data && response.data.success) {
-        // Remove the course from the timetable
-        const updatedTimetableData = { ...timetableData };
-        
-        // Find and remove the course
-        Object.keys(updatedTimetableData).forEach(day => {
-          updatedTimetableData[day] = updatedTimetableData[day].filter(course => course.id !== courseId);
-        });
-        
-        setTimetableData(updatedTimetableData);
-        setShowCourseModal(false);
-      } else {
-        throw new Error('Failed to delete class');
-      }
-    } catch (error) {
-      console.error('Error deleting class:', error);
-      alert('Failed to delete class. Please try again later.');
-    }
-  };
-  
+ 
   // Show loading state
   if (loading) {
     return (
@@ -933,7 +743,7 @@ const processTimetableData = (timetableEntries) => {
       <div className="timetable-header">
         <div className="timetable-title">
           <h1>Professor Timetable</h1>
-          <p>Manage your weekly teaching schedule</p>
+          <p>Your weekly teaching schedule</p>
         </div>
         
         <div className="timetable-actions">
@@ -952,14 +762,8 @@ const processTimetableData = (timetableEntries) => {
             </button>
           </div>
           
-          <button className="btn btn-primary" onClick={addNewClass}>
-            <i className="fas fa-plus"></i> Add Class
-          </button>
-          
           <div className="export-buttons">
-            <button className="btn btn-secondary" onClick={exportSchedule}>
-              <i className="fas fa-calendar-alt"></i> Export iCal
-            </button>
+           
             
             <button className="btn btn-success" onClick={exportSchedulePDF}>
               <i className="fas fa-file-pdf"></i> Download PDF
@@ -1163,11 +967,8 @@ const processTimetableData = (timetableEntries) => {
                       </div>
                       
                       <div className="course-actions">
-                        <button className="btn-icon" title="Edit course">
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button className="btn-icon" title="Delete course">
-                          <i className="fas fa-trash"></i>
+                        <button className="btn-icon" title="Course materials">
+                          <i className="fas fa-book"></i>
                         </button>
                       </div>
                     </div>
@@ -1176,9 +977,6 @@ const processTimetableData = (timetableEntries) => {
               ) : (
                 <div className="no-courses">
                   <p>No classes scheduled for this day</p>
-                  <button className="btn btn-secondary" onClick={addNewClass}>
-                    <i className="fas fa-plus"></i> Add Class
-                  </button>
                 </div>
               )}
             </div>
@@ -1208,181 +1006,72 @@ const processTimetableData = (timetableEntries) => {
         </div>
       </div>
       
-      {/* Course Modal - for viewing, adding or editing a course */}
+      {/* Course Modal - Read-only view like student version */}
       {showCourseModal && selectedCourse && (
         <div className="course-modal-backdrop" onClick={() => setShowCourseModal(false)}>
           <div className="course-modal" onClick={(e) => e.stopPropagation()}>
             <div className="course-modal-header" style={{ backgroundColor: selectedCourse.color }}>
-              <h3>{selectedCourse.isNew ? 'Add New Class' : (selectedCourse.name || 'Class Details')}</h3>
+              <h3>{selectedCourse.name}</h3>
               <button className="modal-close" onClick={() => setShowCourseModal(false)}>
                 <i className="fas fa-times"></i>
               </button>
             </div>
             
             <div className="course-modal-content">
-              {/* Editable form for creating or editing a class */}
-              <form className="course-edit-form">
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="course-day">Day</label>
-                    <select
-                      id="course-day"
-                      name="day"
-                      value={selectedCourse.day}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, day: e.target.value})}
-                    >
-                      {daysOfWeek.map(day => (
-                        <option key={day} value={day}>{day}</option>
-                      ))}
-                    </select>
+              <div className="course-details-grid">
+                <div className="course-detail">
+                  <div className="detail-label">
+                    <i className="fas fa-clock"></i> Time
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="course-type">Type</label>
-                    <select
-                      id="course-type"
-                      name="type"
-                      value={selectedCourse.type}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, type: e.target.value})}
-                    >
-                      {classTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="course-color">Color</label>
-                    <select
-                      id="course-color"
-                      name="color"
-                      value={selectedCourse.color}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, color: e.target.value})}
-                      style={{ backgroundColor: selectedCourse.color, color: '#fff' }}
-                    >
-                      {availableColors.map(color => (
-                        <option 
-                          key={color.value} 
-                          value={color.value}
-                          style={{ backgroundColor: color.value, color: '#fff' }}
-                        >
-                          {color.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="detail-value">
+                    {selectedCourse.startTime} - {selectedCourse.endTime}
                   </div>
                 </div>
                 
-                <div className="form-group">
-                  <label htmlFor="course-name">Course Name *</label>
-                  <input
-                    type="text"
-                    id="course-name"
-                    name="name"
-                    placeholder="e.g. CS 101: Intro to Programming"
-                    value={selectedCourse.name}
-                    onChange={(e) => setSelectedCourse({...selectedCourse, name: e.target.value})}
-                    required
-                  />
-                </div>
-                
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="course-instructor">Course Assistant</label>
-                    <input
-                      type="text"
-                      id="course-instructor"
-                      name="instructor"
-                      placeholder="e.g. TA Smith"
-                      value={selectedCourse.instructor || ''}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, instructor: e.target.value})}
-                    />
+                <div className="course-detail">
+                  <div className="detail-label">
+                    <i className="fas fa-calendar-day"></i> Day
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="course-location">Location *</label>
-                    <input
-                      type="text"
-                      id="course-location"
-                      name="location"
-                      placeholder="e.g. Room 101"
-                      value={selectedCourse.location || ''}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, location: e.target.value})}
-                      required
-                    />
+                  <div className="detail-value">
+                    {selectedCourse.day}
                   </div>
                 </div>
                 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="course-startTime">Start Time *</label>
-                    <input
-                      type="time"
-                      id="course-startTime"
-                      name="startTime"
-                      value={selectedCourse.startTime}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, startTime: e.target.value})}
-                      required
-                    />
+                <div className="course-detail">
+                  <div className="detail-label">
+                    <i className="fas fa-map-marker-alt"></i> Location
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="course-endTime">End Time *</label>
-                    <input
-                      type="time"
-                      id="course-endTime"
-                      name="endTime"
-                      value={selectedCourse.endTime}
-                      onChange={(e) => setSelectedCourse({...selectedCourse, endTime: e.target.value})}
-                      required
-                    />
+                  <div className="detail-value">
+                    {selectedCourse.location}
                   </div>
                 </div>
-              </form>
-            
+                
+                <div className="course-detail">
+                  <div className="detail-label">
+                    <i className="fas fa-chalkboard-teacher"></i> Type
+                  </div>
+                  <div className="detail-value">
+                    {selectedCourse.type}
+                  </div>
+                </div>
+                
+                {selectedCourse.instructor && (
+                  <div className="course-detail">
+                    <div className="detail-label">
+                      <i className="fas fa-user"></i> Assistant
+                    </div>
+                    <div className="detail-value">
+                      {selectedCourse.instructor}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             
             <div className="course-modal-footer">
-              {selectedCourse.isNew ? (
-                // Buttons for new class
-                <>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    onClick={() => setShowCourseModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-primary" 
-                    onClick={() => saveClass(selectedCourse)}
-                  >
-                    Add Class
-                  </button>
-                </>
-              ) : (
-                // Buttons for existing class
-                <>
-                  <button 
-                    type="button" 
-                    className="btn btn-danger" 
-                    onClick={() => deleteClass(selectedCourse.id)}
-                  >
-                    Delete
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    onClick={() => setShowCourseModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-primary" 
-                    onClick={() => saveClass(selectedCourse)}
-                  >
-                    Save Changes
-                  </button>
-                </>
-              )}
+              <button className="btn btn-secondary" onClick={() => setShowCourseModal(false)}>
+                Close
+              </button>
             </div>
           </div>
         </div>

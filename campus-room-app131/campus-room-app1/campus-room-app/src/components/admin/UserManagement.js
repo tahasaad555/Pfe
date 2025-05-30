@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '../../api';
-import '../../styles/dashboard.css';
+import '../../styles/unifié.css';
 
 // Timetable visualization component
 const TimetableVisualization = ({ user }) => {
@@ -1130,9 +1130,9 @@ const UserManagement = () => {
         </div>
       </div>
       
-      {/* Add User Modal */}
+      {/* Add User Modal - CORRIGÉE */}
       {showAddUserModal && (
-        <div className="modal">
+        <div className="modal show">
           <div className="modal-content modal-lg">
             <div className="modal-header">
               <h2>Add New User</h2>
@@ -1259,9 +1259,9 @@ const UserManagement = () => {
         </div>
       )}
       
-      {/* Timetable View Modal */}
+      {/* Timetable View Modal - CORRIGÉE */}
       {showTimetableModal && selectedUser && (
-        <div className="modal">
+        <div className="modal show">
           <div className="modal-content modal-lg">
             <div className="modal-header">
               <h2>Timetable: {selectedUser.firstName} {selectedUser.lastName} ({selectedUser.role})</h2>
@@ -1339,8 +1339,6 @@ const UserManagement = () => {
                         </table>
                       )}
                     </div>
-                    
-                 
                   </>
                 )}
               </div>

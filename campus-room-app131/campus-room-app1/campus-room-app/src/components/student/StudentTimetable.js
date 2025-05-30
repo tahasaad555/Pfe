@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { API } from '../../api';
-import '../../styles/timetable.css';
+
+import '../../styles/unifié.css';
 
 const StudentTimetable = () => {
   const navigate = useNavigate();
@@ -767,86 +768,7 @@ const StudentTimetable = () => {
     `;
   };
   
-  // Function to export schedule as iCal (.ics) file
-  const exportSchedule = async () => {
-    try {
-      // Use API to get ICS file
-      const response = await API.timetableAPI.exportTimetable('ics');
-      
-      // Create blob from response data
-      const blob = new Blob([response.data], { type: 'text/calendar' });
-      const url = URL.createObjectURL(blob);
-      
-      // Create download link
-      const link = document.createElement('a');
-      link.download = 'class_schedule.ics';
-      link.href = url;
-      link.click();
-      
-      // Clean up
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error exporting schedule:', error);
-      alert('Failed to export schedule. Please try again later.');
-      
-      // Fallback to client-side generation if API fails
-      let icsContent = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//CampusRoom//Timetable//EN'
-      ];
-      
-      // Add each class as an event
-      daysOfWeek.forEach((day, dayIndex) => {
-        if (timetableData[day]) {
-          timetableData[day].forEach(course => {
-            const eventDate = new Date(weekDates[dayIndex]);
-            const startTime = course.startTime.split(':');
-            const endTime = course.endTime.split(':');
-            
-            const startDateTime = new Date(eventDate);
-            startDateTime.setHours(parseInt(startTime[0]), parseInt(startTime[1] || 0), 0);
-            
-            const endDateTime = new Date(eventDate);
-            endDateTime.setHours(parseInt(endTime[0]), parseInt(endTime[1] || 0), 0);
-            
-            // Format dates for iCal (YYYYMMDDTHHmmss)
-            const formatDateForICS = (d) => {
-              return d.getFullYear() + 
-                    ('0' + (d.getMonth() + 1)).slice(-2) + 
-                    ('0' + d.getDate()).slice(-2) + 'T' + 
-                    ('0' + d.getHours()).slice(-2) + 
-                    ('0' + d.getMinutes()).slice(-2) + 
-                    ('0' + d.getSeconds()).slice(-2);
-            };
-            
-            icsContent = [
-              ...icsContent,
-              'BEGIN:VEVENT',
-              `UID:${course.id}@campusroom.edu`,
-              `DTSTAMP:${formatDateForICS(new Date())}`,
-              `DTSTART:${formatDateForICS(startDateTime)}`,
-              `DTEND:${formatDateForICS(endDateTime)}`,
-              `SUMMARY:${course.name}`,
-              `LOCATION:${course.location}`,
-              `DESCRIPTION:${course.type} with ${course.instructor || 'n/a'}`,
-              'END:VEVENT'
-            ];
-          });
-        }
-      });
-      
-      icsContent.push('END:VCALENDAR');
-      
-      // Create download
-      const blob = new Blob([icsContent.join('\n')], { type: 'text/calendar' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = 'class_schedule.ics';
-      link.href = url;
-      link.click();
-    }
-  };
+
   
   // Show loading state
   if (loading) {
@@ -903,9 +825,7 @@ const StudentTimetable = () => {
           </div>
           
           <div className="export-buttons">
-            <button className="btn btn-secondary" onClick={exportSchedule}>
-              <i className="fas fa-calendar-alt"></i> Export iCal
-            </button>
+          
             
             <button className="btn btn-success" onClick={exportSchedulePDF}>
               <i className="fas fa-file-pdf"></i> Download PDF
@@ -1146,9 +1066,7 @@ const StudentTimetable = () => {
                         <button className="btn-icon" title="Course materials">
                           <i className="fas fa-book"></i>
                         </button>
-                        <button className="btn-icon" title="Add to calendar">
-                          <i className="fas fa-calendar-plus"></i>
-                        </button>
+                        
                       </div>
                     </div>
                   ))}
@@ -1246,41 +1164,14 @@ const StudentTimetable = () => {
                 )}
               </div>
               
-              <div className="course-materials">
-                <h4>Course Materials</h4>
-                <ul className="materials-list">
-                  <li>
-                    <i className="fas fa-file-pdf"></i>
-                    <span>Course Syllabus</span>
-                    <button className="btn-icon">
-                      <i className="fas fa-download"></i>
-                    </button>
-                  </li>
-                  <li>
-                    <i className="fas fa-file-powerpoint"></i>
-                    <span>Lecture Slides Week {currentWeek + 10}</span>
-                    <button className="btn-icon">
-                      <i className="fas fa-download"></i>
-                    </button>
-                  </li>
-                  <li>
-                    <i className="fas fa-file-alt"></i>
-                    <span>Assignment Details</span>
-                    <button className="btn-icon">
-                      <i className="fas fa-download"></i>
-                    </button>
-                  </li>
-                </ul>
-              </div>
+            
             </div>
             
             <div className="course-modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowCourseModal(false)}>
                 Close
               </button>
-              <button className="btn btn-primary">
-                <i className="fas fa-video"></i> Join Online Session
-              </button>
+        
             </div>
           </div>
         </div>

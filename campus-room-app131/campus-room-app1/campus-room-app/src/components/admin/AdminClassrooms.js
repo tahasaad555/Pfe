@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import Table from '../common/Table';
-import Modal from '../common/Modal';
 import LocalImage from '../common/LocalImage';
 import ImageViewer from '../common/ImageViewer';
 import LocalImageUploader from '../common/LocalImageUploader';
 import LocalImageService from '../../utils/LocalImageService';
-import '../../styles/dashboard.css';
+import '../../styles/unifié.css';
+
 import API from '../../api'; 
 
 const AdminClassrooms = () => {
@@ -355,106 +355,128 @@ const handleClassroomSubmit = async () => {
         )}
       </div>
       
-      {/* Modal pour ajouter/modifier une salle */}
-      <Modal
-        show={showModal}
-        onClose={() => setShowModal(false)}
-        title={`${modalMode === 'add' ? 'Add' : 'Edit'} ${roomType === 'classroom' ? 'Classroom' : 'Study Room'}`}
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="name">
-              {roomType === 'classroom' ? 'Room Number' : 'Room Name'}
-            </label>
-            <input 
-              type="text" 
-              id="name" 
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required 
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="type">Room Type</label>
-            <select 
-              id="type" 
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              required
-            >
-              {roomType === 'classroom' ? (
-                <>
-                  <option value="Lecture Hall">Lecture Hall</option>
-                  <option value="Classroom">Classroom</option>
-                  <option value="Computer Lab">Computer Lab</option>
-                  <option value="Conference Room">Conference Room</option>
-                </>
-              ) : (
-                <>
-                  <option value="study">Study Room</option>
-                  <option value="computer">Computer Lab</option>
-                  <option value="classroom">Classroom</option>
-                </>
-              )}
-            </select>
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="capacity">Capacity</label>
-            <input 
-              type="number" 
-              id="capacity" 
-              name="capacity"
-              min="1"
-              value={formData.capacity}
-              onChange={handleChange}
-              required 
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="features">Features (comma-separated)</label>
-            <input 
-              type="text" 
-              id="features" 
-              name="features"
-              value={formData.features}
-              onChange={handleFeaturesChange}
-              placeholder="e.g., Projector, Whiteboard, Wi-Fi"
-              required 
-            />
-          </div>
-          
-          {/* Image upload - Using our custom component */}
-          <LocalImageUploader onImageSelect={handleImageSelect} />
-          
-          {/* Current image preview */}
-          <div className="form-group">
-            <label>Current Selected Image</label>
-            <div className="image-preview">
-              <ImageViewer 
-                src={formData.image} 
-                alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
-                previewStyle={{ maxWidth: '100%', height: '200px' }}
-                maxWidth="90vw"
-                maxHeight="80vh"
-              />
+      {/* Modal pour ajouter/modifier une salle - CORRIGÉE */}
+      {showModal && (
+        <div className="modal show">
+          <div className="modal-content modal-lg">
+            <div className="modal-header">
+              <h2>
+                {`${modalMode === 'add' ? 'Add' : 'Edit'} ${roomType === 'classroom' ? 'Classroom' : 'Study Room'}`}
+              </h2>
+              <span 
+                className="close-modal"
+                onClick={() => setShowModal(false)}
+              >
+                &times;
+              </span>
             </div>
-            <small className="form-text text-muted">
-              {formData.image && formData.image.startsWith('local-storage://') 
-                ? 'Custom uploaded image from your device' 
-                : 'Default system image'} (Click to enlarge)
-            </small>
+            <div className="modal-body">
+              <form onSubmit={handleSubmit}>
+                <div className="form-group">
+                  <label htmlFor="name">
+                    {roomType === 'classroom' ? 'Room Number' : 'Room Name'}
+                  </label>
+                  <input 
+                    type="text" 
+                    id="name" 
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    required 
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="type">Room Type</label>
+                  <select 
+                    id="type" 
+                    name="type"
+                    value={formData.type}
+                    onChange={handleChange}
+                    required
+                  >
+                    {roomType === 'classroom' ? (
+                      <>
+                        <option value="Lecture Hall">Lecture Hall</option>
+                        <option value="Classroom">Classroom</option>
+                        <option value="Computer Lab">Computer Lab</option>
+                        <option value="Conference Room">Conference Room</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="study">Study Room</option>
+                        <option value="computer">Computer Lab</option>
+                        <option value="classroom">Classroom</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="capacity">Capacity</label>
+                  <input 
+                    type="number" 
+                    id="capacity" 
+                    name="capacity"
+                    min="1"
+                    value={formData.capacity}
+                    onChange={handleChange}
+                    required 
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="features">Features (comma-separated)</label>
+                  <input 
+                    type="text" 
+                    id="features" 
+                    name="features"
+                    value={formData.features}
+                    onChange={handleFeaturesChange}
+                    placeholder="e.g., Projector, Whiteboard, Wi-Fi"
+                    required 
+                  />
+                </div>
+                
+                {/* Image upload - Using our custom component */}
+                <LocalImageUploader onImageSelect={handleImageSelect} />
+                
+                {/* Current image preview */}
+                <div className="form-group">
+                  <label>Current Selected Image</label>
+                  <div className="image-preview">
+                    <ImageViewer 
+                      src={formData.image} 
+                      alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
+                      previewStyle={{ maxWidth: '100%', height: '200px' }}
+                      maxWidth="90vw"
+                      maxHeight="80vh"
+                    />
+                  </div>
+                  <small className="form-text text-muted">
+                    {formData.image && formData.image.startsWith('local-storage://') 
+                      ? 'Custom uploaded image from your device' 
+                      : 'Default system image'} (Click to enlarge)
+                  </small>
+                </div>
+                
+                <div className="modal-footer">
+                  <button 
+                    type="button" 
+                    className="btn-secondary"
+                    onClick={() => setShowModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary">
+                    {modalMode === 'add' ? 'Add' : 'Update'} {roomType === 'classroom' ? 'Classroom' : 'Study Room'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-          
-          <button type="submit" className="btn-primary">
-            {modalMode === 'add' ? 'Add' : 'Update'} {roomType === 'classroom' ? 'Classroom' : 'Study Room'}
-          </button>
-        </form>
-      </Modal>
+        </div>
+      )}
     </div>
   );
 };

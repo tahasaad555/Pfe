@@ -7,6 +7,7 @@ import LocalImageUploader from './LocalImageUploader';
 import LocalImageService from '../../utils/LocalImageService';
 import '../../styles/profile-styles.css';
 
+
 const Profile = () => {
   const navigate = useNavigate();
   const { currentUser, updateCurrentUser, logout } = useAuth();
