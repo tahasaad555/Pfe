@@ -28,12 +28,6 @@ public class AuthController {
         return ResponseEntity.ok(authResponse);
     }
     
-    @PostMapping("/register")
-    public ResponseEntity<AuthResponse> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
-        AuthResponse authResponse = authService.registerUser(registerRequest);
-        return ResponseEntity.ok(authResponse);
-    }
-    
     @PostMapping("/forgot-password")
     public ResponseEntity<AuthResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         AuthResponse response = authService.forgotPassword(request);

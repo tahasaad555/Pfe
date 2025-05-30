@@ -124,8 +124,8 @@ const SideNav = ({
         {/* Sidebar Header */}
         <div className="sidebar-header">
           <img 
-            src={logoSrc || "/image/pfe-logo.png"} 
-            alt={`${title} Logo`} 
+            src="/image/logo.png"
+            alt="logo"
             className="sidebar-logo"
             onError={(e) => {
               e.target.src = "/image/pfe-logo.png";

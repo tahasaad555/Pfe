@@ -205,19 +205,72 @@ public ClassGroupDTO createClassGroup(ClassGroupDTO classGroupDTO) {
     }
     
     /**
-     * Delete a class group
+     * Delete a class group and clean up all associated timetable references
      */
     @Transactional
     public void deleteClassGroup(Long id) {
         ClassGroup classGroup = classGroupRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Class group not found with id: " + id));
         
-        // Remove this class group's entries from professor's timetable if assigned
+        System.out.println("Deleting class group: " + classGroup.getName() + " (ID: " + id + ")");
+        
+        // 1. Clean up professor's timetable entries related to this class group
         if (classGroup.getProfessor() != null) {
             removeClassGroupFromProfessorTimetable(classGroup.getProfessor(), classGroup);
+            System.out.println("Cleaned up professor timetable for class group: " + classGroup.getName());
         }
         
+        // 2. Clean up any individual timetable entries that might reference this class group
+        cleanupIndividualTimetableEntries(classGroup);
+        
+        // 3. The timetable entries associated with this class group will be automatically 
+        //    deleted due to cascade settings, but we can log this for clarity
+        if (classGroup.getTimetableEntries() != null && !classGroup.getTimetableEntries().isEmpty()) {
+            System.out.println("Deleting " + classGroup.getTimetableEntries().size() + 
+                              " timetable entries for class group: " + classGroup.getName());
+        }
+        
+        // 4. Delete the class group (this will cascade delete the timetable entries)
         classGroupRepository.deleteById(id);
+        System.out.println("Class group deleted successfully: " + classGroup.getName());
+    }
+    
+    /**
+     * Clean up individual timetable entries that might reference the deleted class group
+     */
+    private void cleanupIndividualTimetableEntries(ClassGroup classGroup) {
+        try {
+            // Find all users who might have individual timetable entries referencing this class group
+            List<User> allUsers = userRepository.findAll();
+            
+            for (User user : allUsers) {
+                if (user.getTimetableEntries() != null && !user.getTimetableEntries().isEmpty()) {
+                    boolean needsUpdate = false;
+                    
+                    // Remove entries that reference this class group by course code
+                    List<TimetableEntry> entriesToRemove = user.getTimetableEntries().stream()
+                        .filter(entry -> entry.getName() != null && 
+                                entry.getName().startsWith(classGroup.getCourseCode() + ":"))
+                        .collect(Collectors.toList());
+                    
+                    if (!entriesToRemove.isEmpty()) {
+                        for (TimetableEntry entryToRemove : entriesToRemove) {
+                            user.removeTimetableEntry(entryToRemove);
+                            needsUpdate = true;
+                        }
+                        
+                        if (needsUpdate) {
+                            userRepository.save(user);
+                            System.out.println("Cleaned up " + entriesToRemove.size() + 
+                                              " timetable entries for user: " + user.getFirstName() + " " + user.getLastName());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error cleaning up individual timetable entries: " + e.getMessage());
+            // Don't fail the deletion process for this
+        }
     }
     
     /**
@@ -310,8 +363,6 @@ public ClassGroupDTO updateClassGroupTimetable(Long classGroupId, List<Timetable
         return timetableEntries;
     }
     
-    // ... [rest of the file remains unchanged] ...
-
     /**
      * Class to hold conflict check results with more detailed information
      */
@@ -473,7 +524,42 @@ public ClassGroupDTO updateClassGroupTimetable(Long classGroupId, List<Timetable
         return response;
     }
     
-    // ... [rest of the file with helper methods remains unchanged] ...
+    /**
+     * Utility method to refresh all student and professor timetables after class group changes
+     */
+    @Transactional
+    public void refreshAllUserTimetables() {
+        System.out.println("Refreshing all user timetables from class groups...");
+        
+        try {
+            // Get all professors and sync their timetables with their assigned class groups
+            List<User> professors = userRepository.findByRole(User.Role.PROFESSOR);
+            for (User professor : professors) {
+                List<ClassGroup> assignedClassGroups = classGroupRepository.findByProfessor(professor);
+                
+                // Clear professor's existing class-related timetable entries
+                if (professor.getTimetableEntries() != null) {
+                    professor.getTimetableEntries().removeIf(entry -> 
+                        entry.getName() != null && entry.getName().contains(":")
+                    );
+                }
+                
+                // Re-sync with all assigned class groups
+                for (ClassGroup classGroup : assignedClassGroups) {
+                    syncProfessorTimetable(professor, classGroup);
+                }
+            }
+            
+            System.out.println("Refreshed timetables for " + professors.size() + " professors");
+            
+            // Note: Student timetables are now dynamically generated from their branch enrollments,
+            // so no need to refresh individual student timetable entries
+            
+        } catch (Exception e) {
+            System.err.println("Error refreshing user timetables: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
     
     // Helper method to convert ClassGroup entity to DTO
     private ClassGroupDTO convertToClassGroupDTO(ClassGroup classGroup) {
@@ -556,8 +642,6 @@ public ClassGroupDTO updateClassGroupTimetable(Long classGroupId, List<Timetable
         return entry;
     }
     
-    // ... [rest of the file remains unchanged] ...
-
     // Helper function implementations (retain all existing methods)
     private List<Map<String, String>> generateAlternatives(TimetableEntryDTO entry) {
         List<Map<String, String>> alternatives = new ArrayList<>();
@@ -951,72 +1035,78 @@ public ClassGroupDTO updateClassGroupTimetable(Long classGroupId, List<Timetable
             return;
         }
         
+        // Count entries before removal for logging
+        int entriesBeforeRemoval = professor.getTimetableEntries().size();
+        
         // Filter out entries that start with this class group's code
         professor.getTimetableEntries().removeIf(entry -> 
             entry.getName() != null && entry.getName().startsWith(classGroup.getCourseCode() + ":"));
         
-        // Save the professor
-        userRepository.save(professor);
+        int entriesAfterRemoval = professor.getTimetableEntries().size();
+        int removedEntries = entriesBeforeRemoval - entriesAfterRemoval;
+        
+        if (removedEntries > 0) {
+            // Save the professor
+            userRepository.save(professor);
+            System.out.println("Removed " + removedEntries + " timetable entries from professor " + 
+                              professor.getFirstName() + " " + professor.getLastName() + 
+                              " for class group: " + classGroup.getName());
+        }
     }
     
     /**
-     * Validates that class times adhere to policy (whole hours only, 1-2 hour duration)
+     * Validates that class times adhere to policy:
+     * - Whole hours only (minutes = 00)
+     * - 1-2 hour duration
+     * - Time between 8 AM and 6 PM
+     * 
      * @param timetableEntries List of entries to validate
      * @throws RuntimeException if any entry violates time policy
      */
-   /**
- * Validates that class times adhere to policy:
- * - Whole hours only (minutes = 00)
- * - 1-2 hour duration
- * - Time between 8 AM and 6 PM
- * 
- * @param timetableEntries List of entries to validate
- * @throws RuntimeException if any entry violates time policy
- */
-private void validateTimetableTimePolicy(List<TimetableEntryDTO> timetableEntries) {
-    if (timetableEntries == null || timetableEntries.isEmpty()) {
-        return;
+    private void validateTimetableTimePolicy(List<TimetableEntryDTO> timetableEntries) {
+        if (timetableEntries == null || timetableEntries.isEmpty()) {
+            return;
+        }
+        
+        for (TimetableEntryDTO entry : timetableEntries) {
+            // Skip validation if either time is missing
+            if (entry.getStartTime() == null || entry.getEndTime() == null) {
+                continue;
+            }
+            
+            // Validate that times are on the hour (minutes = 00)
+            if (!isWholeHourTime(entry.getStartTime())) {
+                throw new RuntimeException("Start time must be on the hour (e.g., 9:00, 10:00): " + entry.getStartTime());
+            }
+            
+            if (!isWholeHourTime(entry.getEndTime())) {
+                throw new RuntimeException("End time must be on the hour (e.g., 9:00, 10:00): " + entry.getEndTime());
+            }
+            
+            // Validate that times are within the allowed range (8 AM to 6 PM)
+            int startHour = Integer.parseInt(entry.getStartTime().split(":")[0]);
+            int endHour = Integer.parseInt(entry.getEndTime().split(":")[0]);
+            
+            if (startHour < 8 || startHour >= 18) {
+                throw new RuntimeException("Start time must be between 8:00 AM and 5:00 PM: " + entry.getStartTime());
+            }
+            
+            if (endHour < 9 || endHour > 18) {
+                throw new RuntimeException("End time must be between 9:00 AM and 6:00 PM: " + entry.getEndTime());
+            }
+            
+            // Validate duration is exactly 1 or 2 hours
+            int startMinutes = convertTimeToMinutes(entry.getStartTime());
+            int endMinutes = convertTimeToMinutes(entry.getEndTime());
+            int durationMinutes = endMinutes - startMinutes;
+            
+            if (durationMinutes != 60 && durationMinutes != 120) {
+                throw new RuntimeException("Class duration must be exactly 1 or 2 hours (got " + (durationMinutes / 60.0) + " hours)");
+            }
+        }
     }
     
-    for (TimetableEntryDTO entry : timetableEntries) {
-        // Skip validation if either time is missing
-        if (entry.getStartTime() == null || entry.getEndTime() == null) {
-            continue;
-        }
-        
-        // Validate that times are on the hour (minutes = 00)
-        if (!isWholeHourTime(entry.getStartTime())) {
-            throw new RuntimeException("Start time must be on the hour (e.g., 9:00, 10:00): " + entry.getStartTime());
-        }
-        
-        if (!isWholeHourTime(entry.getEndTime())) {
-            throw new RuntimeException("End time must be on the hour (e.g., 9:00, 10:00): " + entry.getEndTime());
-        }
-        
-        // INSÉRER ICI: Validation de la plage horaire 8h-18h
-        // Validate that times are within the allowed range (8 AM to 6 PM)
-        int startHour = Integer.parseInt(entry.getStartTime().split(":")[0]);
-        int endHour = Integer.parseInt(entry.getEndTime().split(":")[0]);
-        
-        if (startHour < 8 || startHour >= 18) {
-            throw new RuntimeException("Start time must be between 8:00 AM and 5:00 PM: " + entry.getStartTime());
-        }
-        
-        if (endHour < 9 || endHour > 18) {
-            throw new RuntimeException("End time must be between 9:00 AM and 6:00 PM: " + entry.getEndTime());
-        }
-        
-        // Validate duration is exactly 1 or 2 hours
-        int startMinutes = convertTimeToMinutes(entry.getStartTime());
-        int endMinutes = convertTimeToMinutes(entry.getEndTime());
-        int durationMinutes = endMinutes - startMinutes;
-        
-        if (durationMinutes != 60 && durationMinutes != 120) {
-            throw new RuntimeException("Class duration must be exactly 1 or 2 hours (got " + (durationMinutes / 60.0) + " hours)");
-        }
-    }
-}
-/**
+    /**
      * Check if a time is a whole hour (minutes = 00)
      */
     private boolean isWholeHourTime(String time) {
@@ -1029,57 +1119,52 @@ private void validateTimetableTimePolicy(List<TimetableEntryDTO> timetableEntrie
     }
     
     /**
- * ADD THIS METHOD to your ClassGroupService.java
- * Validates and normalizes timetable entries before saving
- * 
- * IMPORTANT: Make sure you have added this autowired dependency:
- * @Autowired
- * private ClassroomRepository classroomRepository;
- */
-private void validateAndNormalizeClassroomLocations(List<TimetableEntryDTO> timetableEntries) {
-    if (timetableEntries == null || timetableEntries.isEmpty()) {
-        return;
-    }
-    
-    logger.debug("Validating and normalizing {} timetable entries", timetableEntries.size());
-    
-    for (TimetableEntryDTO entry : timetableEntries) {
-        if (entry.getLocation() != null && !entry.getLocation().trim().isEmpty()) {
-            String location = entry.getLocation().trim();
-            String originalLocation = location;
-            
-            // Try to resolve to actual classroom ID
-            try {
-                // Check if it's already a classroom ID
-                if (classroomRepository.existsById(location)) {
-                    logger.debug("Location '{}' is already a valid classroom ID", location);
-                    continue; // Already valid
-                }
+     * Validates and normalizes timetable entries before saving
+     */
+    private void validateAndNormalizeClassroomLocations(List<TimetableEntryDTO> timetableEntries) {
+        if (timetableEntries == null || timetableEntries.isEmpty()) {
+            return;
+        }
+        
+        logger.debug("Validating and normalizing {} timetable entries", timetableEntries.size());
+        
+        for (TimetableEntryDTO entry : timetableEntries) {
+            if (entry.getLocation() != null && !entry.getLocation().trim().isEmpty()) {
+                String location = entry.getLocation().trim();
+                String originalLocation = location;
                 
-                // Try to find by room number
-                List<Classroom> classrooms = classroomRepository.findAll();
-                boolean found = false;
-                
-                for (Classroom classroom : classrooms) {
-                    if (classroom.getRoomNumber().equals(location) || 
-                        classroom.getRoomNumber().equalsIgnoreCase(location)) {
-                        // Update the entry to use the classroom ID for consistency
-                        entry.setLocation(classroom.getId());
-                        logger.debug("Normalized location '{}' to classroom ID '{}'", 
-                                   originalLocation, classroom.getId());
-                        found = true;
-                        break;
+                // Try to resolve to actual classroom ID
+                try {
+                    // Check if it's already a classroom ID
+                    if (classroomRepository.existsById(location)) {
+                        logger.debug("Location '{}' is already a valid classroom ID", location);
+                        continue; // Already valid
                     }
+                    
+                    // Try to find by room number
+                    List<Classroom> classrooms = classroomRepository.findAll();
+                    boolean found = false;
+                    
+                    for (Classroom classroom : classrooms) {
+                        if (classroom.getRoomNumber().equals(location) || 
+                            classroom.getRoomNumber().equalsIgnoreCase(location)) {
+                            // Update the entry to use the classroom ID for consistency
+                            entry.setLocation(classroom.getId());
+                            logger.debug("Normalized location '{}' to classroom ID '{}'", 
+                                       originalLocation, classroom.getId());
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        logger.warn("Could not find classroom for location '{}' - keeping original value", location);
+                    }
+                    
+                } catch (Exception e) {
+                    logger.warn("Could not validate classroom location '{}': {}", location, e.getMessage());
                 }
-                
-                if (!found) {
-                    logger.warn("Could not find classroom for location '{}' - keeping original value", location);
-                }
-                
-            } catch (Exception e) {
-                logger.warn("Could not validate classroom location '{}': {}", location, e.getMessage());
             }
         }
     }
-}
 }

@@ -103,10 +103,7 @@ export const authAPI = {
     return instance.post('/auth/login', { email, password, rememberMe });
   },
 
-  register: (userData) => {
-    console.log('Register request:', userData);
-    return instance.post('/auth/register', userData);
-  },
+ 
   
   forgotPassword: (email) => {
     return instance.post('/auth/forgot-password', { email });

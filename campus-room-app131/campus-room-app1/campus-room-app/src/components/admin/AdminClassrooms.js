@@ -282,51 +282,72 @@ const handleClassroomSubmit = async () => {
     }
   };
   
-  // Colonnes pour la table des salles de classe
-  const classroomColumns = [
-    { header: 'ID', key: 'id' },
-    { header: 'Room Number', key: 'roomNumber' },
-    { header: 'Type', key: 'type' },
-    { header: 'Capacity', key: 'capacity' },
-    { 
-      header: 'Features', 
-      key: 'features',
-      render: (features) => Array.isArray(features) ? features.join(', ') : features
-    },
-    {
-      header: 'Image',
-      key: 'image',
-      render: (image) => (
-        <div className="table-image-preview">
-          <ImageViewer 
-            src={image} 
-            alt="Classroom" 
-            previewStyle={{width: '50px', height: '40px'}}
-          />
-        </div>
-      )
-    },
-    {
-      header: 'Actions',
-      key: 'id',
-      render: (id, classroom) => (
-        <div className="table-actions">
-          <button 
-            className="btn-table btn-edit"
-            onClick={() => openEditModal(classroom, 'classroom')}
-          >
-            Edit
-          </button>
-          <button 
-            className="btn-table btn-delete"
-            onClick={() => handleDeleteRoom(id, 'classroom')}
-          >
-            Delete
-          </button>
-        </div>
-      )
-    }
-  ];
+ // Update these two parts in your AdminClassrooms.js file:
+
+// 1. In the classroomColumns array, update the Image column:
+const classroomColumns = [
+  { header: 'ID', key: 'id' },
+  { header: 'Room Number', key: 'roomNumber' },
+  { header: 'Type', key: 'type' },
+  { header: 'Capacity', key: 'capacity' },
+  { 
+    header: 'Features', 
+    key: 'features',
+    render: (features) => Array.isArray(features) ? features.join(', ') : features
+  },
+  {
+    header: 'Image',
+    key: 'image',
+    render: (image) => (
+      <div className="table-image-preview">
+        <ImageViewer 
+          src={image} 
+          alt="Classroom" 
+          previewStyle={{width: '50px', height: '40px'}}
+          clickable={false} // ADD THIS LINE - Disables enlargement
+        />
+      </div>
+    )
+  },
+  {
+    header: 'Actions',
+    key: 'id',
+    render: (id, classroom) => (
+      <div className="table-actions">
+        <button 
+          className="btn-table btn-edit"
+          onClick={() => openEditModal(classroom, 'classroom')}
+        >
+          Edit
+        </button>
+        <button 
+          className="btn-table btn-delete"
+          onClick={() => handleDeleteRoom(id, 'classroom')}
+        >
+          Delete
+        </button>
+      </div>
+    )
+  }
+];
+
+// 2. In the modal form, update the image preview:
+<div className="form-group">
+  <label>Current Selected Image</label>
+  <div className="image-preview">
+    <ImageViewer 
+      src={formData.image} 
+      alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
+      previewStyle={{ maxWidth: '100%', height: '200px' }}
+      clickable={false} // ADD THIS LINE - Disables enlargement
+    />
+  </div>
+  <small className="form-text text-muted">
+    {formData.image && formData.image.startsWith('local-storage://') 
+      ? 'Custom uploaded image from your device' 
+      : 'Default system image'}
+  </small>
+</div>
   
   return (
     <div className="main-content">
@@ -444,15 +465,14 @@ const handleClassroomSubmit = async () => {
                 {/* Current image preview */}
                 <div className="form-group">
                   <label>Current Selected Image</label>
-                  <div className="image-preview">
-                    <ImageViewer 
-                      src={formData.image} 
-                      alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
-                      previewStyle={{ maxWidth: '100%', height: '200px' }}
-                      maxWidth="90vw"
-                      maxHeight="80vh"
-                    />
-                  </div>
+                 <div className="image-preview">
+  <ImageViewer 
+    src={formData.image} 
+    alt={roomType === 'classroom' ? 'Classroom' : 'Study Room'} 
+    previewStyle={{ maxWidth: '100%', height: '200px' }}
+    clickable={false} // Disable enlargement
+  />
+</div>
                   <small className="form-text text-muted">
                     {formData.image && formData.image.startsWith('local-storage://') 
                       ? 'Custom uploaded image from your device' 

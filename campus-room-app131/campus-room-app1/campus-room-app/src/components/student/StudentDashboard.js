@@ -536,7 +536,7 @@ const StudentDashboard = () => {
       {/* Welcome Section */}
       <div className="welcome-section">
         <h2>Welcome, {currentUser?.firstName || 'Student'}!</h2>
-        <p>Reserve study rooms and manage your academic schedule here.</p>
+        <p></p>
         {error && (
           <div className="alert alert-warning">
             <i className="fas fa-exclamation-triangle"></i>
@@ -727,9 +727,7 @@ const StudentDashboard = () => {
                     fallbackSrc="/images/classroom-default.jpg"
                     className="room-image"
                   />
-                  <div className="room-image-overlay">
-                    <span className="status-badge status-available">Available</span>
-                  </div>
+                  
                 </div>
                 <div className="room-details">
                   <h3>{room.roomNumber || room.name}</h3>
@@ -758,7 +756,7 @@ const StudentDashboard = () => {
     { to: '/student', icon: 'fas fa-tachometer-alt', text: 'Dashboard', exact: true },
     { to: '/student/reserve', icon: 'fas fa-calendar-plus', text: 'Reserve Study Room' },
     { to: '/student/reservations', icon: 'fas fa-calendar-check', text: 'My Reservations' },
-    { to: '/student/timetable', icon: 'fas fa-calendar-week', text: 'Emploi du temps', exact: false },
+    { to: '/student/timetable', icon: 'fas fa-calendar-week', text: 'Timetable', exact: false },
     { to: '/student/profile', icon: 'fas fa-user', text: 'Profile' }
   ];
 

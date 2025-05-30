@@ -101,24 +101,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Register function
-  const register = async (userData) => {
-    try {
-      const response = await authAPI.register(userData);
-      const data = response.data;
-      
-      return { 
-        success: data.success !== false, 
-        message: data.message 
-      };
-    } catch (error) {
-      console.error('Registration error:', error);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Failed to create an account' 
-      };
-    }
-  };
+ 
 
   // Logout function
   const logout = () => {
@@ -281,20 +264,19 @@ const resetPasswordWithCode = async (email, verificationCode, password, confirmP
     return currentUser;
   };
 
-  const value = {
-    currentUser,
-    login,
-    register,
-    logout,
-    resetPassword,
-    resetPasswordWithToken,
-    verifyCode,               
-    resetPasswordWithCode,    
-    updateUserProfile,
-    changePassword,
-    updateCurrentUser
-  };
-
+ const value = {
+  currentUser,
+  login,
+ 
+  logout,
+  resetPassword,
+  resetPasswordWithToken,
+  verifyCode,               
+  resetPasswordWithCode,    
+  updateUserProfile,
+  changePassword,
+  updateCurrentUser
+};
   return (
     <AuthContext.Provider value={value}>
       {!loading && children}

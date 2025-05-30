@@ -7,7 +7,6 @@ import { ToastContainer } from 'react-toastify';
 
 // Auth Components
 import Login from './components/auth/Login';
-import Register from './components/auth/Register';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ResetPassword from './components/auth/ResetPassword';
 
@@ -56,7 +55,6 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Login />} />
-            <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 

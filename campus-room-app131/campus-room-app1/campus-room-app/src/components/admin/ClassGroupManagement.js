@@ -5,6 +5,8 @@ import '../../styles/unifié.css';
 
 const ClassGroupManagement = () => {
   // Original states
+  const [showViewModal, setShowViewModal] = useState(false);
+
   const [branches, setBranches] = useState([]);
   const [classGroups, setClassGroups] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
@@ -1367,76 +1369,87 @@ const ConflictWarning = ({ conflict }) => {
       }
     };
     
-    // Handle timetable entry change with conflict checking
-    const handleTimetableEntryChange = async (e) => {
-      const { name, value } = e.target;
-      const updatedEntry = {
-        ...newTimetableEntry,
-        [name]: value
-      };
+ const handleTimetableEntryChange = async (e) => {
+  const { name, value } = e.target;
+  const updatedEntry = {
+    ...newTimetableEntry,
+    [name]: value
+  };
+  
+  // Clear alternative suggestions when entry changes
+  setAlternativeSuggestions([]);
+  
+  setNewTimetableEntry(updatedEntry);
+  
+  // Auto-search for classrooms when time inputs are complete
+  if ((name === 'startTime' || name === 'endTime') && 
+      updatedEntry.startTime && updatedEntry.endTime && 
+      classroomSearchDate) {
+    
+    // Validate time format first
+    const timeValidation = validateTimeRange(updatedEntry.startTime, updatedEntry.endTime);
+    if (timeValidation.valid) {
+      await searchAvailableClassrooms(classroomSearchDate, updatedEntry.startTime, updatedEntry.endTime);
+    }
+  }
+  
+  // Continue with existing conflict checking logic...
+  if (name === 'startTime' || name === 'endTime') {
+    const timeValidation = validateTimeRange(
+      name === 'startTime' ? value : updatedEntry.startTime,
+      name === 'endTime' ? value : updatedEntry.endTime
+    );
+    
+    if (!timeValidation.valid && updatedEntry.startTime && updatedEntry.endTime) {
+      setPotentialConflict({
+        hasConflict: true,
+        message: timeValidation.message,
+        conflictType: ["TIME_FORMAT"]
+      });
+      return;
+    }
+  }
+  
+  // If we have enough data to check for conflicts
+  if (updatedEntry.day && updatedEntry.startTime && updatedEntry.endTime && 
+      updatedEntry.startTime !== updatedEntry.endTime) {
+    
+    // First validate the time format
+    const timeValidation = validateTimeRange(updatedEntry.startTime, updatedEntry.endTime);
+    if (!timeValidation.valid) {
+      setPotentialConflict({
+        hasConflict: true,
+        message: timeValidation.message,
+        conflictType: ["TIME_FORMAT"]
+      });
+      return;
+    }
+    
+    // Show checking indicator
+    setIsPotentialConflictChecking(true);
+    
+    // Debounce the conflict check to avoid too many API calls
+    if (conflictCheckTimeout) {
+      clearTimeout(conflictCheckTimeout);
+    }
+    
+    setConflictCheckTimeout(setTimeout(async () => {
+      const conflictResult = await checkForPotentialConflicts(updatedEntry);
+      setPotentialConflict(conflictResult);
+      setIsPotentialConflictChecking(false);
       
-      // Clear alternative suggestions when entry changes
-      setAlternativeSuggestions([]);
-      
-      setNewTimetableEntry(updatedEntry);
-      
-      // Validate time ranges when time inputs change
-      if (name === 'startTime' || name === 'endTime') {
-        const timeValidation = validateTimeRange(
-          name === 'startTime' ? value : updatedEntry.startTime,
-          name === 'endTime' ? value : updatedEntry.endTime
-        );
-        
-        if (!timeValidation.valid && updatedEntry.startTime && updatedEntry.endTime) {
-          setPotentialConflict({
-            hasConflict: true,
-            message: timeValidation.message,
-            conflictType: ["TIME_FORMAT"]
-          });
-          return;
-        }
+      // Log conflict result for debugging
+      if (conflictResult && conflictResult.hasConflict) {
+        console.log(`Conflict detected: ${conflictResult.message}`);
+        console.log('Conflict types:', conflictResult.conflictType);
+        console.log('Affected users:', conflictResult.affectedUsers);
       }
-      
-      // If we have enough data to check for conflicts
-      if (updatedEntry.day && updatedEntry.startTime && updatedEntry.endTime && 
-          updatedEntry.startTime !== updatedEntry.endTime) {
-        
-        // First validate the time format
-        const timeValidation = validateTimeRange(updatedEntry.startTime, updatedEntry.endTime);
-        if (!timeValidation.valid) {
-          setPotentialConflict({
-            hasConflict: true,
-            message: timeValidation.message,
-            conflictType: ["TIME_FORMAT"]
-          });
-          return;
-        }
-        
-        // Show checking indicator
-        setIsPotentialConflictChecking(true);
-        
-        // Debounce the conflict check to avoid too many API calls
-        if (conflictCheckTimeout) {
-          clearTimeout(conflictCheckTimeout);
-        }
-        
-        setConflictCheckTimeout(setTimeout(async () => {
-          const conflictResult = await checkForPotentialConflicts(updatedEntry);
-          setPotentialConflict(conflictResult);
-          setIsPotentialConflictChecking(false);
-          
-          // Log conflict result for debugging
-          if (conflictResult && conflictResult.hasConflict) {
-            console.log(`Conflict detected: ${conflictResult.message}`);
-            console.log('Conflict types:', conflictResult.conflictType);
-            console.log('Affected users:', conflictResult.affectedUsers);
-          }
-        }, 500));
-      } else {
-        // Clear potential conflict if we don't have enough data
-        setPotentialConflict(null);
-      }
-    };
+    }, 500));
+  } else {
+    // Clear potential conflict if we don't have enough data
+    setPotentialConflict(null);
+  }
+};
     
     // Select a branch
     const selectBranch = (branch) => {
@@ -1444,19 +1457,28 @@ const ConflictWarning = ({ conflict }) => {
     };
     
     // Select a class group
-    const selectClassGroup = (classGroup) => {
-      setSelectedClassGroup(classGroup);
-      
-      // Load timetable entries for this class group
-      if (classGroup.timetableEntries && classGroup.timetableEntries.length > 0) {
-        setTimetableEntries(classGroup.timetableEntries);
-        console.log('Loaded timetable entries from class group:', classGroup.timetableEntries);
-      } else {
-        console.log('No timetable entries found in class group data');
-        setTimetableEntries([]);
-      }
-    };
-    
+  const selectClassGroup = (classGroup) => {
+  setSelectedClassGroup(classGroup);
+  
+  // Load timetable entries for this class group
+  if (classGroup.timetableEntries && classGroup.timetableEntries.length > 0) {
+    setTimetableEntries(classGroup.timetableEntries);
+    console.log('Loaded timetable entries from class group:', classGroup.timetableEntries);
+  } else {
+    console.log('No timetable entries found in class group data');
+    setTimetableEntries([]);
+  }
+  
+  // Show the view modal
+  setShowViewModal(true);
+};
+    // 3. Add classroom selection handler for timetable entries
+const handleClassroomSelect = (classroom) => {
+  setNewTimetableEntry({
+    ...newTimetableEntry,
+    location: classroom.roomNumber
+  });
+};
     // Open add branch modal
     const openAddBranchModal = () => {
       setBranchFormData({
@@ -3248,6 +3270,129 @@ for (let hour = 8; hour < 18; hour++) {
            </div>
          </div>
        )}
+       {/* View Class Group Modal */}
+{showViewModal && selectedClassGroup && (
+  <div className="modal-overlay" onClick={() => setShowViewModal(false)}>
+    <div className="modal-content" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h4 className="modal-title">Class Group Details</h4>
+        <button 
+          className="modal-close-btn"
+          onClick={() => setShowViewModal(false)}
+        >
+          <i className="fas fa-times"></i>
+        </button>
+      </div>
+      <div className="modal-body">
+        <div className="detail-row">
+          <div className="detail-label">Course Code:</div>
+          <div className="detail-value">{selectedClassGroup.courseCode}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Name:</div>
+          <div className="detail-value">{selectedClassGroup.name}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Description:</div>
+          <div className="detail-value">{selectedClassGroup.description || 'No description provided'}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Academic Year:</div>
+          <div className="detail-value">{selectedClassGroup.academicYear}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Semester:</div>
+          <div className="detail-value">{selectedClassGroup.semester}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Professor:</div>
+          <div className="detail-value">{selectedClassGroup.professorName || 'Not assigned'}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Branch:</div>
+          <div className="detail-value">{selectedClassGroup.branchName || 'Unassigned'}</div>
+        </div>
+        
+        <div className="detail-row">
+          <div className="detail-label">Location:</div>
+          <div className="detail-value">{selectedClassGroup.location || 'Not assigned'}</div>
+        </div>
+        
+        {/* Timetable Information */}
+        {timetableEntries && timetableEntries.length > 0 && (
+          <div className="detail-row">
+            <div className="detail-label">Schedule:</div>
+            <div className="detail-value">
+              <div className="schedule-list">
+                {timetableEntries.map((entry, index) => (
+                  <div key={index} className="schedule-item" style={{ borderLeft: `4px solid ${entry.color || '#6366f1'}` }}>
+                    <div className="schedule-day-time">
+                      <strong>{entry.day}</strong> {entry.startTime} - {entry.endTime}
+                    </div>
+                    <div className="schedule-details">
+                      <div>{entry.name}</div>
+                      {entry.location && <div><i className="fas fa-map-marker-alt"></i> {entry.location}</div>}
+                      {entry.instructor && <div><i className="fas fa-user"></i> {entry.instructor}</div>}
+                      <div><i className="fas fa-tag"></i> {entry.type || 'Lecture'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Student Count if available */}
+        {selectedClassGroup.studentCount !== undefined && (
+          <div className="detail-row">
+            <div className="detail-label">Enrolled Students:</div>
+            <div className="detail-value">{selectedClassGroup.studentCount} students</div>
+          </div>
+        )}
+        
+        {/* Creation/Update info if available */}
+        {selectedClassGroup.createdAt && (
+          <div className="detail-row">
+            <div className="detail-label">Created:</div>
+            <div className="detail-value">{new Date(selectedClassGroup.createdAt).toLocaleDateString()}</div>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer">
+        <button 
+          className="btn btn-secondary"
+          onClick={() => {
+            setShowViewModal(false);
+            openEditModal(selectedClassGroup);
+          }}
+        >
+          <i className="fas fa-edit"></i> Edit
+        </button>
+        <button 
+          className="btn btn-info"
+          onClick={() => {
+            setShowViewModal(false);
+            openTimetableModal(selectedClassGroup);
+          }}
+        >
+          <i className="fas fa-calendar"></i> Manage Timetable
+        </button>
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowViewModal(false)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
      </div>
    );
   };

@@ -69,7 +69,7 @@ const Login = () => {
     <div className="landing-container">
       <div className="branding">
         <div className="logo-container">
-          <img src="/image/pfe-logo.png" alt="Campus Room Logo" className="logo" />
+          <img src="/image/logo.png" alt="Campus Room Logo" className="logo" />
           <h1>Campus<span>Room</span></h1>
         </div>
         <p className="tagline">Smart Classroom Management System</p>
@@ -79,7 +79,7 @@ const Login = () => {
         <div className="auth-sidebar">
           <h2>Welcome Back</h2>
           <p>Log in to manage your classroom reservations and scheduling</p>
-          <p className="new-account">Don't have an account? <Link to="/register">Create one</Link></p>
+        <p className="contact-admin">Need an account? Contact your administrator</p>
         </div>
         
         <div className="auth-form">
@@ -117,14 +117,7 @@ const Login = () => {
             </div>
             
             <div className="form-options">
-              <label className="remember">
-                <input 
-                  type="checkbox" 
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <span>Remember me</span>
-              </label>
+            
               <Link to="/forgot-password" className="forgot-link">Forgot password?</Link>
             </div>
             

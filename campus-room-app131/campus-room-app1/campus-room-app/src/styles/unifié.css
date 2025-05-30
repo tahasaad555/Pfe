@@ -532,7 +532,7 @@ a:hover {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   position: relative;
-  min-height: 80px;
+  min-height: 100px;
 }
 
 .sidebar-header::after {
@@ -545,12 +545,11 @@ a:hover {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
 }
-
 .sidebar-logo {
-  width: 48px;
-  height: 48px;
+  width: 80px;        /* Bigger size */
+  height: 80px;       /* Bigger size */
   margin-right: var(--space-4);
-  border-radius: var(--radius-xl);
+  border-radius: 12px;  /* Less rounded = more square */
   box-shadow: var(--shadow);
   transition: var(--transition-all);
   flex-shrink: 0;
@@ -3434,7 +3433,7 @@ a:hover {
 
 .branding {
   text-align: center;
-  margin-bottom: var(--space-8);
+  margin-bottom: 0
 }
 
 .logo-container {
@@ -3445,9 +3444,9 @@ a:hover {
 }
 
 .logo {
-  width: 50px;
-  height: 50px;
-  margin-right: var(--space-2);
+  width: 250px;
+  height: 250px;
+  margin-right: 0px;
 }
 
 .branding h1 {
@@ -8685,5 +8684,940 @@ body.modal-open {
   .notification-icon {
     margin-right: 0;
     margin-bottom: var(--space-2);
+  }
+}
+
+/* Indicateur d'étapes pour le formulaire de réinitialisation */
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0;
+  padding: 1rem 0;
+}
+
+.step {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  position: relative;
+  background-color: #e5e7eb;
+  color: #6b7280;
+  border: 2px solid #e5e7eb;
+}
+
+.step.active {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transform: scale(1.1);
+}
+
+.step.completed {
+  background-color: #10b981;
+  color: white;
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.step.completed::before {
+  content: '✓';
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 1rem;
+  height: 2px;
+  background-color: #e5e7eb;
+  transform: translateY(-50%);
+  transition: background-color 0.3s ease;
+}
+
+.step.completed:not(:last-child)::after {
+  background-color: #10b981;
+}
+
+/* Animation pour les étapes complétées */
+.step.active, .step.completed {
+  animation: stepComplete 0.5s ease-in-out;
+}
+
+@keyframes stepComplete {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+/* Responsive pour les petits écrans */
+@media (max-width: 768px) {
+  .step-indicator {
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+  }
+  
+  .step {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+  
+  .step:not(:last-child)::after {
+    width: 0.5rem;
+  }
+}
+
+/* Variante avec des couleurs personnalisées pour votre thème */
+.step-indicator.custom-theme .step {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  border-color: #d1d5db;
+}
+
+.step-indicator.custom-theme .step.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.step-indicator.custom-theme .step.completed {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #10b981;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.step-indicator.custom-theme .step:not(:last-child)::after {
+  background-color: #d1d5db;
+}
+
+.step-indicator.custom-theme .step.completed:not(:last-child)::after {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  height: 3px;
+}
+/* =================================
+   MODAL FIX - ADD THIS TO THE END OF YOUR unifié.css FILE
+   This fixes the modal display issues without changing your React components
+   ================================= */
+
+/* CRITICAL FIX: Ensure modal overlay appears above everything */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 999999 !important; /* Very high z-index to ensure it's on top */
+  padding: 20px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  animation: fadeInModal 0.3s ease-out !important;
+}
+
+/* CRITICAL FIX: Ensure modal content is properly styled */
+.modal-overlay .modal-content {
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  max-width: 600px !important;
+  width: 100% !important;
+  max-height: 90vh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  opacity: 1 !important;
+  transform: translateY(0) scale(1) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  z-index: 1000000 !important; /* Even higher than overlay */
+  pointer-events: auto !important;
+}
+
+/* CRITICAL FIX: Modal header styling */
+.modal-overlay .modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  padding: 24px 32px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  position: relative !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+/* CRITICAL FIX: Modal header gradient overlay */
+.modal-overlay .modal-header::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%) !important;
+  pointer-events: none !important;
+}
+
+/* CRITICAL FIX: Modal title */
+.modal-overlay .modal-title,
+.modal-overlay .modal-header h4,
+.modal-overlay .modal-header h3,
+.modal-overlay .modal-header h2 {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  margin: 0 !important;
+  position: relative !important;
+  z-index: 1 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* CRITICAL FIX: Modal close button */
+.modal-overlay .modal-close-btn,
+.modal-overlay .modal-close,
+.modal-overlay .close-modal {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-size: 18px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  backdrop-filter: blur(10px) !important;
+  position: relative !important;
+  z-index: 2 !important;
+  pointer-events: auto !important;
+}
+
+.modal-overlay .modal-close-btn:hover,
+.modal-overlay .modal-close:hover,
+.modal-overlay .close-modal:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* CRITICAL FIX: Modal body */
+.modal-overlay .modal-body {
+  flex: 1 !important;
+  padding: 32px !important;
+  overflow-y: auto !important;
+  background: #ffffff !important;
+  position: relative !important;
+}
+
+/* CRITICAL FIX: Modal body scrollbar */
+.modal-overlay .modal-body::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.modal-overlay .modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-radius: 3px !important;
+}
+
+.modal-overlay .modal-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea, #764ba2) !important;
+  border-radius: 3px !important;
+}
+
+/* CRITICAL FIX: Detail rows in modal */
+.modal-overlay .detail-row {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 16px !important;
+  margin-bottom: 16px !important;
+  padding: 16px 24px !important;
+  background: #f8fafc !important;
+  border-radius: 12px !important;
+  border-left: 4px solid #667eea !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.modal-overlay .detail-row::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.02) 0%, rgba(118, 75, 162, 0.01) 100%) !important;
+  pointer-events: none !important;
+}
+
+.modal-overlay .detail-row:hover {
+  transform: translateX(4px) !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1) !important;
+  border-left-width: 6px !important;
+}
+
+.modal-overlay .detail-row:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* CRITICAL FIX: Detail labels and values */
+.modal-overlay .detail-label {
+  flex-shrink: 0 !important;
+  font-weight: 600 !important;
+  color: #1f2937 !important;
+  font-size: 14px !important;
+  min-width: 140px !important;
+  letter-spacing: 0.5px !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.modal-overlay .detail-value {
+  color: #4b5563 !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  word-break: break-word !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* CRITICAL FIX: Status badges in modal */
+.modal-overlay .status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 8px 16px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  border: 1px solid !important;
+  backdrop-filter: blur(10px) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.modal-overlay .status-badge::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%) !important;
+  pointer-events: none !important;
+}
+
+/* Status badge colors */
+.modal-overlay .status-badge.status-approved {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+}
+
+.modal-overlay .status-badge.status-pending {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: white !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) !important;
+}
+
+.modal-overlay .status-badge.status-rejected {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: white !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+}
+
+.modal-overlay .status-badge.status-canceled,
+.modal-overlay .status-badge.status-cancelled {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%) !important;
+  color: white !important;
+  border-color: rgba(107, 114, 128, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3) !important;
+}
+
+.modal-overlay .status-badge.status-used {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  color: white !important;
+  border-color: rgba(5, 150, 105, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3) !important;
+}
+
+/* CRITICAL FIX: Status messages in modal */
+.modal-overlay .status-message {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 16px 24px !important;
+  border-radius: 16px !important;
+  margin-top: 24px !important;
+  border: 1px solid !important;
+  backdrop-filter: blur(10px) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.modal-overlay .status-message.success {
+  background: linear-gradient(135deg, #ecfdf5 0%, rgba(236, 253, 245, 0.8) 100%) !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.modal-overlay .status-message.pending {
+  background: linear-gradient(135deg, #fffbeb 0%, rgba(255, 251, 235, 0.8) 100%) !important;
+  color: #92400e !important;
+  border-color: #fcd34d !important;
+}
+
+.modal-overlay .status-message.error {
+  background: linear-gradient(135deg, #fef2f2 0%, rgba(254, 242, 242, 0.8) 100%) !important;
+  color: #991b1b !important;
+  border-color: #fca5a5 !important;
+}
+
+/* CRITICAL FIX: Modal footer */
+.modal-overlay .modal-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 16px !important;
+  padding: 24px 32px !important;
+  border-top: 1px solid #e5e7eb !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(249, 250, 251, 0.9) 100%) !important;
+  backdrop-filter: blur(10px) !important;
+  flex-shrink: 0 !important;
+}
+
+/* CRITICAL FIX: Modal footer buttons */
+.modal-overlay .modal-footer .btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 12px 24px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+  backdrop-filter: blur(10px) !important;
+  pointer-events: auto !important;
+  border: 1px solid transparent !important;
+}
+
+.modal-overlay .modal-footer .btn::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%) !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s !important;
+}
+
+.modal-overlay .modal-footer .btn:hover::before {
+  opacity: 1 !important;
+}
+
+/* Button variants */
+.modal-overlay .modal-footer .btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
+}
+
+.modal-overlay .modal-footer .btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4) !important;
+}
+
+.modal-overlay .modal-footer .btn-secondary {
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: #4b5563 !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .modal-footer .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #1f2937 !important;
+  border-color: #9ca3af !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.modal-overlay .modal-footer .btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+}
+
+.modal-overlay .modal-footer .btn-danger:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4) !important;
+}
+
+/* CRITICAL FIX: Animation for modal appearance */
+@keyframes fadeInModal {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+/* CRITICAL FIX: Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+/* CRITICAL FIX: Responsive design for modals */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 16px !important;
+  }
+  
+  .modal-overlay .modal-content {
+    margin: 0 !important;
+    width: calc(100% - 32px) !important;
+    max-height: 95vh !important;
+    border-radius: 16px !important;
+  }
+  
+  .modal-overlay .modal-header,
+  .modal-overlay .modal-body,
+  .modal-overlay .modal-footer {
+    padding: 16px 24px !important;
+  }
+  
+  .modal-overlay .modal-footer {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  
+  .modal-overlay .modal-footer .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  
+  .modal-overlay .detail-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 12px 16px !important;
+  }
+  
+  .modal-overlay .detail-label {
+    min-width: auto !important;
+    font-size: 12px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 8px !important;
+  }
+  
+  .modal-overlay .modal-content {
+    width: calc(100% - 16px) !important;
+    max-height: 98vh !important;
+    border-radius: 12px !important;
+  }
+  
+  .modal-overlay .modal-header .modal-title,
+  .modal-overlay .modal-header h4,
+  .modal-overlay .modal-header h3,
+  .modal-overlay .modal-header h2 {
+    font-size: 18px !important;
+  }
+  
+  .modal-overlay .modal-footer .btn {
+    min-height: 48px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* CRITICAL FIX: Override any conflicting styles */
+.modal-overlay * {
+  box-sizing: border-box !important;
+}
+
+/* CRITICAL FIX: Ensure clickable elements work */
+.modal-overlay .modal-content,
+.modal-overlay .modal-header,
+.modal-overlay .modal-body,
+.modal-overlay .modal-footer,
+.modal-overlay .btn,
+.modal-overlay button {
+  pointer-events: auto !important;
+}
+
+/* CRITICAL FIX: Ensure the overlay stops propagation but content allows it */
+.modal-overlay {
+  cursor: pointer;
+}
+
+.modal-overlay .modal-content {
+  cursor: default;
+}
+/* =================================
+   ENHANCED ROOM CARDS FOR STUDENT DASHBOARD
+   Add this to your unifié.css file
+   ================================= */
+
+/* Container for room cards grid */
+.rooms-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)) !important;
+  gap: var(--space-6) !important;
+  margin-top: var(--space-6) !important;
+  padding: var(--space-4) !important;
+}
+
+/* Individual room card styling */
+.room-card {
+  background: var(--bg-tertiary) !important;
+  border: 2px solid var(--border-normal) !important;
+  border-radius: var(--radius-2xl) !important;
+  padding: 0 !important; /* Reset padding to control it better */
+  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: var(--shadow) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: auto !important;
+  min-height: 420px !important;
+}
+
+/* Hover effect for room cards */
+.room-card:hover {
+  border-color: var(--color-primary) !important;
+  transform: translateY(-4px) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+
+/* Top accent line */
+.room-card::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 4px !important;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-purple)) !important;
+  transform: scaleX(0) !important;
+  transition: var(--transition-all) !important;
+  transform-origin: left !important;
+}
+
+.room-card:hover::before {
+  transform: scaleX(1) !important;
+}
+
+/* Room image container */
+.room-image-container {
+  position: relative !important;
+  width: 100% !important;
+  height: 200px !important;
+  overflow: hidden !important;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+  background: var(--color-gray-100) !important;
+}
+
+/* Room image styling */
+.room-image,
+.room-image-container .room-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 0 !important;
+  transition: var(--transition-transform) !important;
+  display: block !important;
+}
+
+.room-card:hover .room-image {
+  transform: scale(1.05) !important;
+}
+
+/* Image overlay for status badge */
+.room-image-overlay {
+  position: absolute !important;
+  top: var(--space-4) !important;
+  right: var(--space-4) !important;
+  z-index: 2 !important;
+}
+
+.room-image-overlay .status-badge {
+  background: rgba(16, 185, 129, 0.9) !important;
+  color: white !important;
+  padding: var(--space-2) var(--space-3) !important;
+  border-radius: var(--radius-full) !important;
+  font-size: var(--text-xs) !important;
+  font-weight: var(--font-semibold) !important;
+  text-transform: uppercase !important;
+  letter-spacing: var(--tracking-wide) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.status-badge.status-available {
+  background: rgba(16, 185, 129, 0.9) !important;
+}
+
+.status-badge.status-occupied {
+  background: rgba(239, 68, 68, 0.9) !important;
+}
+
+/* Room details container */
+.room-details {
+  padding: var(--space-6) !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--space-4) !important;
+}
+
+/* Room title/name */
+.room-card h3,
+.room-details h3,
+.room-card .room-name {
+  font-size: var(--text-xl) !important;
+  font-weight: var(--font-bold) !important;
+  color: var(--text-primary) !important;
+  margin: 0 0 var(--space-3) 0 !important;
+  text-align: center !important;
+  letter-spacing: var(--tracking-tight) !important;
+}
+
+/* Room information paragraphs */
+.room-details p {
+  margin: 0 0 var(--space-2) 0 !important;
+  color: var(--text-secondary) !important;
+  font-size: var(--text-sm) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: var(--space-2) !important;
+  line-height: var(--leading-relaxed) !important;
+}
+
+.room-details p i {
+  color: var(--color-primary) !important;
+  width: 16px !important;
+  text-align: center !important;
+  flex-shrink: 0 !important;
+}
+
+.room-details p strong {
+  color: var(--text-primary) !important;
+  font-weight: var(--font-semibold) !important;
+}
+
+/* Features section */
+.room-details .features {
+  margin-top: auto !important;
+  padding-top: var(--space-4) !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+
+.room-details .features p {
+  margin-bottom: var(--space-3) !important;
+  font-weight: var(--font-semibold) !important;
+  color: var(--text-primary) !important;
+  justify-content: center !important;
+}
+
+.room-details .features ul {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: var(--space-2) !important;
+  justify-content: center !important;
+}
+
+.room-details .features li {
+  background: linear-gradient(135deg, var(--color-primary-100) 0%, var(--color-primary-200) 100%) !important;
+  color: var(--color-primary-700) !important;
+  padding: var(--space-1) var(--space-3) !important;
+  border-radius: var(--radius-full) !important;
+  font-size: var(--text-xs) !important;
+  font-weight: var(--font-medium) !important;
+  border: 1px solid var(--color-primary-300) !important;
+  transition: var(--transition-all) !important;
+}
+
+.room-details .features li:hover {
+  background: linear-gradient(135deg, var(--color-primary-200) 0%, var(--color-primary-300) 100%) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Reserve button */
+.reserve-btn,
+.room-card .btn-primary {
+  width: calc(100% - var(--space-12)) !important;
+  margin: 0 var(--space-6) var(--space-6) var(--space-6) !important;
+  padding: var(--space-3) var(--space-4) !important;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-600) 100%) !important;
+  color: var(--text-inverse) !important;
+  border: none !important;
+  border-radius: var(--radius-xl) !important;
+  font-size: var(--text-sm) !important;
+  font-weight: var(--font-semibold) !important;
+  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  text-transform: uppercase !important;
+  letter-spacing: var(--tracking-wide) !important;
+  box-shadow: var(--shadow-primary) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: var(--space-2) !important;
+  min-height: 48px !important;
+}
+
+.reserve-btn::before,
+.room-card .btn-primary::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%) !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s !important;
+}
+
+.reserve-btn:hover::before,
+.room-card .btn-primary:hover::before {
+  opacity: 1 !important;
+}
+
+.reserve-btn:hover,
+.room-card .btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4) !important;
+}
+
+.reserve-btn:active,
+.room-card .btn-primary:active {
+  transform: translateY(0) !important;
+}
+
+/* Loading state for images */
+.room-image-container::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-gray-300);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: spin 1s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.room-image-container.loading::after {
+  opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .rooms-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+    gap: var(--space-5) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .rooms-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: var(--space-4) !important;
+    padding: var(--space-2) !important;
+  }
+  
+  .room-card {
+    min-height: 380px !important;
+  }
+  
+  .room-image-container {
+    height: 160px !important;
+  }
+  
+  .room-details {
+    padding: var(--space-4) !important;
+  }
+  
+  .room-card h3,
+  .room-details h3 {
+    font-size: var(--text-lg) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .rooms-grid {
+    grid-template-columns: 1fr !important;
+    gap: var(--space-4) !important;
+  }
+  
+  .room-card {
+    min-height: 360px !important;
+  }
+  
+  .room-image-container {
+    height: 140px !important;
+  }
+  
+  .reserve-btn,
+  .room-card .btn-primary {
+    font-size: var(--text-xs) !important;
+    padding: var(--space-3) !important;
   }
 }

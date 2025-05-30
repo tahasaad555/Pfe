@@ -281,7 +281,7 @@ const ForgotPassword = () => {
     <div className="landing-container">
       <div className="branding">
         <div className="logo-container">
-          <img src="/images/logo.png" alt="Campus Room Logo" className="logo" />
+          <img src="/image/logo.png" alt="Campus Room Logo" className="logo" />
           <h1>Campus<span>Room</span></h1>
         </div>
         <p className="tagline">Smart Classroom Management System</p>
@@ -310,9 +310,9 @@ const ForgotPassword = () => {
           
           {renderStep()}
           
-          <div className="mt-3 text-center">
-            <Link to="/register">Need an account? Register</Link>
-          </div>
+      <div className="mt-3 text-center">
+  <Link to="/">Back to Login</Link>
+</div>
         </div>
       </div>
       

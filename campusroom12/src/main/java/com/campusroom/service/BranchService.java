@@ -6,9 +6,11 @@ import com.campusroom.dto.ClassGroupDTO;
 import com.campusroom.dto.UserDTO;
 import com.campusroom.model.Branch;
 import com.campusroom.model.ClassGroup;
+import com.campusroom.model.TimetableEntry;
 import com.campusroom.model.User;
 import com.campusroom.repository.BranchRepository;
 import com.campusroom.repository.ClassGroupRepository;
+import com.campusroom.repository.TimetableEntryRepository;
 import com.campusroom.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,9 @@ public class BranchService {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private TimetableEntryRepository timetableEntryRepository;
     
     /**
      * Get all branches with their class groups
@@ -79,20 +84,71 @@ public class BranchService {
     }
     
     /**
-     * Delete a branch
+     * Delete a branch and clean up associated data
      */
     @Transactional
     public void deleteBranch(Long id) {
         Branch branch = branchRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Branch not found with id: " + id));
         
-        // Remove branch reference from all class groups
-        for (ClassGroup classGroup : branch.getClassGroups()) {
-            classGroup.setBranch(null);
-            classGroupRepository.save(classGroup);
+        System.out.println("Deleting branch: " + branch.getName() + " (ID: " + id + ")");
+        
+        // 1. Handle class groups in this branch
+        if (branch.getClassGroups() != null && !branch.getClassGroups().isEmpty()) {
+            System.out.println("Found " + branch.getClassGroups().size() + " class groups to handle");
+            
+            for (ClassGroup classGroup : branch.getClassGroups()) {
+                System.out.println("Processing class group: " + classGroup.getName());
+                
+                // Clean up timetable entries for this class group
+                cleanupClassGroupTimetableEntries(classGroup);
+                
+                // Remove branch reference from class group (don't delete the class group)
+                classGroup.setBranch(null);
+                classGroupRepository.save(classGroup);
+                System.out.println("Removed branch reference from class group: " + classGroup.getName());
+            }
         }
         
+        // 2. Remove students from this branch (they can be reassigned to other branches)
+        if (branch.getStudents() != null && !branch.getStudents().isEmpty()) {
+            System.out.println("Removing " + branch.getStudents().size() + " students from branch");
+            branch.getStudents().clear();
+            branchRepository.save(branch);
+        }
+        
+        // 3. Delete the branch
         branchRepository.deleteById(id);
+        System.out.println("Branch deleted successfully");
+    }
+    
+    /**
+     * Clean up timetable entries when a class group is being removed from a branch
+     */
+    private void cleanupClassGroupTimetableEntries(ClassGroup classGroup) {
+        if (classGroup.getTimetableEntries() == null || classGroup.getTimetableEntries().isEmpty()) {
+            return;
+        }
+        
+        System.out.println("Cleaning up " + classGroup.getTimetableEntries().size() + 
+                          " timetable entries for class group: " + classGroup.getName());
+        
+        // Remove corresponding entries from professor's personal timetable if assigned
+        if (classGroup.getProfessor() != null) {
+            User professor = classGroup.getProfessor();
+            if (professor.getTimetableEntries() != null) {
+                // Remove entries that match this class group's course code
+                professor.getTimetableEntries().removeIf(entry -> 
+                    entry.getName() != null && entry.getName().startsWith(classGroup.getCourseCode() + ":")
+                );
+                userRepository.save(professor);
+                System.out.println("Cleaned up professor timetable for: " + professor.getFirstName() + " " + professor.getLastName());
+            }
+        }
+        
+        // The timetable entries will be automatically deleted when the class group is saved
+        // because of the cascade settings, but we can clear them explicitly for clarity
+        classGroup.getTimetableEntries().clear();
     }
     
     /**
@@ -132,6 +188,9 @@ public class BranchService {
         branch.getStudents().add(student);
         Branch updatedBranch = branchRepository.save(branch);
         
+        System.out.println("Added student " + student.getFirstName() + " " + student.getLastName() + 
+                          " to branch " + branch.getName());
+        
         return convertToBranchDTO(updatedBranch);
     }
 
@@ -148,6 +207,8 @@ public class BranchService {
         
         if (branch.getStudents() != null) {
             branch.getStudents().removeIf(s -> s.getId().equals(studentId));
+            System.out.println("Removed student " + student.getFirstName() + " " + student.getLastName() + 
+                              " from branch " + branch.getName());
         }
         
         Branch updatedBranch = branchRepository.save(branch);
@@ -157,9 +218,12 @@ public class BranchService {
     
     // Helper method to convert Branch entity to DTO
     private BranchDTO convertToBranchDTO(Branch branch) {
-        List<ClassGroupDTO> classGroupDTOs = branch.getClassGroups().stream()
-                .map(this::convertToClassGroupDTO)
-                .collect(Collectors.toList());
+        List<ClassGroupDTO> classGroupDTOs = new ArrayList<>();
+        if (branch.getClassGroups() != null) {
+            classGroupDTOs = branch.getClassGroups().stream()
+                    .map(this::convertToClassGroupDTO)
+                    .collect(Collectors.toList());
+        }
         
         List<UserDTO> studentDTOs = new ArrayList<>();
         if (branch.getStudents() != null) {

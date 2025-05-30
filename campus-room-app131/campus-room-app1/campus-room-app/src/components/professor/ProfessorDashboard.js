@@ -463,7 +463,7 @@ const ProfessorDashboard = () => {
         </div>
         <div className="welcome-actions">
           <button 
-            className="btn-secondary"
+            className="btn-secondary refresh-btn"
             onClick={handleRefreshData}
             disabled={loading}
             title="Refresh dashboard data"
@@ -588,9 +588,6 @@ const ProfessorDashboard = () => {
         <div className="section-header">
           <h2>Today's Schedule</h2>
           <div className="section-actions">
-            <Link to="/professor/schedule" className="view-all-link">
-              View Schedule <i className="fas fa-chevron-right"></i>
-            </Link>
             <Link to="/professor/timetable" className="view-all-link">
               View Timetable <i className="fas fa-chevron-right"></i>
             </Link>
@@ -602,7 +599,7 @@ const ProfessorDashboard = () => {
             <i className="fas fa-calendar"></i>
             <p>No classes scheduled for today</p>
             <Link to="/professor/timetable" className="btn-primary">
-              Manage Timetable
+              View Timetable
             </Link>
           </div>
         ) : (
@@ -684,7 +681,7 @@ const ProfessorDashboard = () => {
                 title="View notifications"
               >
                 <i className="fas fa-bell"></i>
-                  <i className="fas fa-bell"></i>
+                 
                {showNotifications && (  // <-- We'll change this
   <div className="notifications-container">
     <NotificationPanel />
@@ -693,7 +690,7 @@ const ProfessorDashboard = () => {
             </div>
             <div className="user-info">
               <span className="role-badge">Professor</span>
-              <span>{currentUser?.firstName} {currentUser?.lastName}</span>
+             
             </div>
           </div>
         </div>

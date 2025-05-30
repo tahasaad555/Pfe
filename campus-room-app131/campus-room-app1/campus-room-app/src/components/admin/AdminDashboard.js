@@ -492,7 +492,7 @@ const AdminDashboard = () => {
           <h1>Admin Dashboard</h1>
           {lastUpdated && (
             <span className="last-updated">
-              Last updated: {lastUpdated.toLocaleTimeString()} (Shared with Reports)
+              Last updated: {lastUpdated.toLocaleTimeString()} 
             </span>
           )}
           
@@ -512,23 +512,14 @@ const AdminDashboard = () => {
               </button>
             </div>
             <button 
-              className="btn-refresh"
+              className="action-button"
               onClick={fetchDashboardData}
-              title="Refresh dashboard data"
+              title="btn-secondary refresh-btn"
             >
               <i className="fas fa-sync-alt"></i>
             </button>
-            <button 
-              className={`btn-auto-refresh ${autoRefreshEnabled ? 'active' : ''}`}
-              onClick={toggleAutoRefresh}
-              title={autoRefreshEnabled ? "Disable auto-refresh" : "Enable auto-refresh"}
-            >
-              <i className={`fas fa-${autoRefreshEnabled ? 'toggle-on' : 'toggle-off'}`}></i>
-              Auto
-            </button>
-            <button className="action-button">
-              <i className="fas fa-bars"></i>
-            </button>
+            
+           
           </div>
         </div>
         

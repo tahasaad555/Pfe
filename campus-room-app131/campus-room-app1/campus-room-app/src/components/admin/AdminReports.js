@@ -541,952 +541,867 @@ const AdminReports = () => {
     };
   };
   
-  // Export functionality
-  const exportToExcel = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      setMessage({ text: '', type: '' });
-      
-      // Dynamic import of xlsx library
-      const XLSX = await import('xlsx');
-      
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      
-      // 1. Branch Overview Sheet
-      const overviewData = [
-        ['CAMPUS BRANCH ANALYTICS REPORT', '', '', ''],
-        ['Generated on:', new Date().toLocaleDateString(), '', ''],
-        ['', '', '', ''],
-        ['SYSTEM OVERVIEW', '', '', ''],
-        ['Total Branches', branchStatistics.totalBranches || 0, '', ''],
-        ['Total Students', branchStatistics.totalStudents || 0, '', ''],
-        ['Total Courses', branchStatistics.totalClassGroups || 0, '', ''],
-        ['Average Students per Branch', branchStatistics.averageStudentsPerBranch || 0, '', ''],
-        ['', '', '', ''],
-        ['MOST POPULATED BRANCH', '', '', ''],
-        ['Name', branchStatistics.mostPopulated?.name || 'N/A', '', ''],
-        ['Students', branchStatistics.mostPopulated?.totalStudents || 0, '', ''],
-        ['Courses', branchStatistics.mostPopulated?.totalClassGroups || 0, '', ''],
-        ['', '', '', ''],
-        ['BRANCH DETAILS', '', '', ''],
-        ['Branch Name', 'Total Students', 'Total Courses', 'Avg Students/Class']
-      ];
-      
-      // Add branch details
-      branchesData.forEach(branch => {
-        overviewData.push([
-          branch.name,
-          branch.totalStudents,
-          branch.totalClassGroups,
-          branch.averageStudentsPerClass
-        ]);
-      });
-      
-      const overviewSheet = XLSX.utils.aoa_to_sheet(overviewData);
-      XLSX.utils.book_append_sheet(workbook, overviewSheet, 'Branch Overview');
-      
-      // 2. Detailed Branch Data Sheet
-      const detailedData = [
-        ['DETAILED BRANCH INFORMATION', '', '', '', '', '', '', ''],
-        ['Branch Name', 'Description', 'Total Students', 'Active Students', 'Total Courses', 'Active Courses', 'Male Students', 'Female Students']
-      ];
-      
-      branchesData.forEach(branch => {
-        detailedData.push([
-          branch.name,
-          branch.description,
-          branch.totalStudents,
-          branch.activeStudents,
-          branch.totalCourses,
-          branch.activeCourses,
-          branch.studentsByGender?.male || 0,
-          branch.studentsByGender?.female || 0
-        ]);
-      });
-      
-      const detailedSheet = XLSX.utils.aoa_to_sheet(detailedData);
-      XLSX.utils.book_append_sheet(workbook, detailedSheet, 'Detailed Branch Data');
-      
-      // 3. Student Enrollment by Year Sheet
-      const enrollmentData = [
-        ['STUDENT ENROLLMENT BY YEAR', '', '', ''],
-        ['Branch Name', 'Year', 'Student Count', 'Percentage of Branch']
-      ];
-      
-      branchesData.forEach(branch => {
-        if (branch.studentsByYear && branch.studentsByYear.length > 0) {
-          branch.studentsByYear.forEach(yearData => {
-            const percentage = branch.totalStudents > 0 ? 
-              ((yearData.count / branch.totalStudents) * 100).toFixed(1) : 0;
-            enrollmentData.push([
-              branch.name,
-              yearData.year,
-              yearData.count,
-              percentage + '%'
-            ]);
-          });
-        }
-      });
-      
-      const enrollmentSheet = XLSX.utils.aoa_to_sheet(enrollmentData);
-      XLSX.utils.book_append_sheet(workbook, enrollmentSheet, 'Enrollment by Year');
-      
-      // 4. Course Distribution Sheet
-      const courseData = [
-        ['COURSE DISTRIBUTION BY SEMESTER', '', '', ''],
-        ['Branch Name', 'Semester', 'Course Count', 'Branch Total Courses']
-      ];
-      
-      branchesData.forEach(branch => {
-        if (branch.classGroupsBySemester && branch.classGroupsBySemester.length > 0) {
-          branch.classGroupsBySemester.forEach(semesterData => {
-            courseData.push([
-              branch.name,
-              semesterData.semester,
-              semesterData.count,
-              branch.totalCourses
-            ]);
-          });
-        }
-      });
-      
-      const courseSheet = XLSX.utils.aoa_to_sheet(courseData);
-      XLSX.utils.book_append_sheet(workbook, courseSheet, 'Course Distribution');
-      
-      // 5. Recent Enrollments Sheet
-      const recentData = [
-        ['RECENT ENROLLMENTS (LAST MONTH)', '', '', '', ''],
-        ['Branch Name', 'Student Name', 'Email', 'Enrollment Date', 'ID']
-      ];
-      
-      branchesData.forEach(branch => {
-        if (branch.recentEnrollments && branch.recentEnrollments.length > 0) {
-          branch.recentEnrollments.forEach(student => {
-            recentData.push([
-              branch.name,
-              `${student.firstName} ${student.lastName}`,
-              student.email || 'N/A',
-              new Date(student.createdAt).toLocaleDateString(),
-              student.id
-            ]);
-          });
-        }
-      });
-      
-      const recentSheet = XLSX.utils.aoa_to_sheet(recentData);
-      XLSX.utils.book_append_sheet(workbook, recentSheet, 'Recent Enrollments');
-      
-      // Style the workbook (add some basic formatting)
-      const filename = `Branch_Analytics_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-      
-      // Write and download
-      XLSX.writeFile(workbook, filename);
-      
-      setMessage({
-        text: `Excel report "${filename}" has been downloaded successfully`,
-        type: 'success'
-      });
-      
-    } catch (error) {
-      console.error('Error exporting to Excel:', error);
-      setError('Failed to export Excel file: ' + (error.message || 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  };
+
   
-  const exportToPDF = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      setMessage({ text: '', type: '' });
-      
-      // Create a new window for PDF
-      const printWindow = window.open('', '_blank');
-      
-      const currentDate = new Date();
-      const reportId = `RPT-${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}-${String(currentDate.getHours()).padStart(2, '0')}${String(currentDate.getMinutes()).padStart(2, '0')}`;
-      
-      const pdfContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Official Campus Management System Report</title>
-          <style>
+ // Replace the existing exportToPDF function with this improved version
+
+const exportToPDF = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    setMessage({ text: '', type: '' });
+    
+    const currentDate = new Date();
+    const reportId = `RPT-${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}-${String(currentDate.getHours()).padStart(2, '0')}${String(currentDate.getMinutes()).padStart(2, '0')}`;
+    
+    // Create a new window for PDF with better handling
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    
+    if (!printWindow) {
+      throw new Error('Pop-up blocked. Please allow pop-ups for this site to export PDF reports.');
+    }
+    
+    const pdfContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Campus Management System Report - ${reportId}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          /* Reset and Base Styles */
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            line-height: 1.4;
+            color: #000;
+            font-size: 11pt;
+            background: white;
+          }
+          
+          .document-container {
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 15mm;
+            background: white;
+            min-height: 100vh;
+          }
+          
+          /* Header Styles */
+          .official-header {
+            text-align: center;
+            border: 2px solid #000;
+            padding: 20px;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+          }
+          
+          .government-seal {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            border: 2px solid #000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            background: white;
+          }
+          
+          .official-title {
+            font-size: 18pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 15px 0;
+            letter-spacing: 1px;
+          }
+          
+          .department-info {
+            font-size: 12pt;
+            margin: 8px 0;
+            font-weight: 600;
+          }
+          
+          .classification {
+            font-size: 10pt;
+            margin-top: 15px;
+            font-style: italic;
+            color: #666;
+          }
+          
+          /* Document Info Grid */
+          .document-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 25px 0;
+            border: 1px solid #000;
+            padding: 15px;
+            background: #fafbfc;
+          }
+          
+          .doc-field {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+          }
+          
+          .doc-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 130px;
+            color: #333;
+          }
+          
+          .doc-value {
+            flex: 1;
+            font-weight: normal;
+          }
+          
+          /* Section Headers */
+          .section-header {
+            background: linear-gradient(135deg, #000 0%, #333 100%);
+            color: white;
+            padding: 12px 20px;
+            font-weight: bold;
+            font-size: 14pt;
+            margin: 30px 0 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .subsection-header {
+            background: #333;
+            color: white;
+            padding: 8px 15px;
+            font-weight: bold;
+            font-size: 12pt;
+            margin: 25px 0 15px 0;
+            border-left: 4px solid #000;
+          }
+          
+          /* Tables */
+          .official-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            border: 1px solid #000;
+            font-size: 10pt;
+          }
+          
+          .official-table th {
+            background: #000;
+            color: white;
+            padding: 10px 8px;
+            text-align: left;
+            font-weight: bold;
+            border: 1px solid #000;
+            font-size: 9pt;
+            text-transform: uppercase;
+          }
+          
+          .official-table td {
+            padding: 8px;
+            border: 1px solid #ccc;
+            vertical-align: top;
+            line-height: 1.3;
+          }
+          
+          .official-table tr:nth-child(even) {
+            background: #f8f9fa;
+          }
+          
+          .official-table tr:hover {
+            background: #e3f2fd;
+          }
+          
+          /* Stats Grid */
+          .stats-section {
+            border: 1px solid #000;
+            padding: 20px;
+            margin: 20px 0;
+            background: #f8f9fa;
+          }
+          
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+          }
+          
+          .stat-box {
+            border: 1px solid #333;
+            padding: 15px;
+            text-align: center;
+            background: white;
+            border-radius: 4px;
+          }
+          
+          .stat-number {
+            font-size: 24pt;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+            color: #000;
+          }
+          
+          .stat-label {
+            font-size: 9pt;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: #666;
+          }
+          
+          /* Executive Summary */
+          .executive-summary {
+            border: 1px solid #000;
+            padding: 20px;
+            margin: 25px 0;
+            background: #f8f9fa;
+            line-height: 1.6;
+          }
+          
+          .executive-summary h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 14pt;
+            text-decoration: underline;
+          }
+          
+          .critical-info {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            font-weight: bold;
+            border-radius: 4px;
+          }
+          
+          /* Status Badges */
+          .status-approved { 
+            color: #28a745; 
+            font-weight: bold; 
+          }
+          
+          .status-pending { 
+            color: #ffc107; 
+            font-weight: bold; 
+          }
+          
+          .status-cancelled { 
+            color: #dc3545; 
+            font-weight: bold; 
+          }
+          
+          /* Signature Section */
+          .signature-section {
+            margin-top: 40px;
+            border: 1px solid #000;
+            padding: 25px;
+            background: #fafbfc;
+          }
+          
+          .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            margin-top: 40px;
+          }
+          
+          .signature-block {
+            text-align: center;
+          }
+          
+          .signature-line {
+            border-bottom: 2px solid #000;
+            height: 50px;
+            margin-bottom: 15px;
+          }
+          
+          .official-seal {
+            margin: 20px auto;
+            text-align: center;
+            border: 2px solid #000;
+            padding: 20px;
+            background: white;
+          }
+          
+          /* Footer */
+          .official-footer {
+            margin-top: 40px;
+            text-align: center;
+            border-top: 2px solid #000;
+            padding-top: 20px;
+            font-size: 10pt;
+            background: #f8f9fa;
+            padding: 20px;
+          }
+          
+          /* Print Specific Styles */
+          @media print {
             body {
-              font-family: 'Times New Roman', serif;
-              margin: 0;
-              padding: 0;
-              color: #000;
-              line-height: 1.6;
-              font-size: 12pt;
+              font-size: 10pt;
+              line-height: 1.3;
             }
+            
             .document-container {
-              max-width: 210mm;
-              margin: 0 auto;
-              padding: 20mm;
-              background: white;
+              padding: 10mm;
+              margin: 0;
+              max-width: none;
             }
-            .official-header {
-              text-align: center;
-              border: 3px solid #000;
-              padding: 15px;
-              margin-bottom: 30px;
-              background: #f8f8f8;
-            }
-            .government-seal {
-              width: 60px;
-              height: 60px;
-              margin: 0 auto 10px;
-              border: 2px solid #000;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: bold;
-              font-size: 20px;
-            }
-            .official-title {
-              font-size: 18pt;
-              font-weight: bold;
-              text-transform: uppercase;
-              margin: 10px 0;
-              letter-spacing: 1px;
-            }
-            .department-info {
-              font-size: 11pt;
-              margin: 5px 0;
-              font-weight: bold;
-            }
-            .document-info {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 20px;
-              margin: 20px 0;
-              border: 1px solid #000;
-              padding: 10px;
-            }
-            .doc-field {
-              margin-bottom: 8px;
-            }
-            .doc-label {
-              font-weight: bold;
-              display: inline-block;
-              width: 120px;
-            }
+            
             .section-header {
-              background: #000;
-              color: white;
-              padding: 8px 15px;
-              font-weight: bold;
-              font-size: 14pt;
-              margin: 25px 0 15px 0;
-              text-transform: uppercase;
+              break-after: avoid;
+              page-break-after: avoid;
             }
-            .subsection-header {
-              background: #333;
-              color: white;
-              padding: 6px 12px;
-              font-weight: bold;
-              font-size: 12pt;
-              margin: 20px 0 10px 0;
-              border-left: 5px solid #000;
-            }
+            
             .official-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 15px 0;
-              border: 2px solid #000;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
-            .official-table th {
-              background: #000;
-              color: white;
-              padding: 8px;
-              text-align: left;
-              font-weight: bold;
-              border: 1px solid #000;
-              font-size: 10pt;
-            }
-            .official-table td {
-              padding: 6px 8px;
-              border: 1px solid #000;
-              font-size: 10pt;
-              vertical-align: top;
-            }
-            .official-table tr:nth-child(even) {
-              background: #f5f5f5;
-            }
-            .stats-section {
-              border: 2px solid #000;
-              padding: 15px;
-              margin: 15px 0;
-              background: #fafafa;
-            }
-            .stats-grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 15px;
-              margin: 10px 0;
-            }
+            
             .stat-box {
-              border: 1px solid #000;
-              padding: 10px;
-              text-align: center;
-              background: white;
+              break-inside: avoid;
             }
-            .stat-number {
-              font-size: 20pt;
-              font-weight: bold;
-              display: block;
-              margin-bottom: 5px;
-            }
-            .stat-label {
-              font-size: 9pt;
-              text-transform: uppercase;
-              font-weight: bold;
-            }
-            .executive-summary {
-              border: 2px solid #000;
-              padding: 15px;
-              margin: 20px 0;
-              background: #f8f8f8;
-            }
+            
             .signature-section {
-              margin-top: 40px;
-              border: 1px solid #000;
-              padding: 20px;
-            }
-            .signature-grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 40px;
-              margin-top: 30px;
-            }
-            .signature-block {
-              text-align: center;
-            }
-            .signature-line {
-              border-bottom: 2px solid #000;
-              height: 40px;
-              margin-bottom: 10px;
-            }
-            .official-footer {
-              margin-top: 30px;
-              text-align: center;
-              border-top: 2px solid #000;
-              padding-top: 15px;
-              font-size: 10pt;
-            }
-            .page-break {
+              break-before: always;
               page-break-before: always;
             }
-            .confidential {
-              position: fixed;
-              top: 10mm;
-              right: 10mm;
-              background: #ff0000;
-              color: white;
-              padding: 5px 10px;
-              font-weight: bold;
-              transform: rotate(45deg);
-              font-size: 10pt;
+            
+            .executive-summary {
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
-            .toc {
-              border: 1px solid #000;
-              padding: 15px;
-              margin: 20px 0;
-            }
-            .toc-item {
-              padding: 3px 0;
-              border-bottom: 1px dotted #ccc;
-            }
-            .status-approved { color: #006400; font-weight: bold; }
-            .status-pending { color: #ff8c00; font-weight: bold; }
-            .status-cancelled { color: #dc143c; font-weight: bold; }
-            .critical-info {
-              background: #ffffcc;
-              border: 2px solid #ffcc00;
-              padding: 10px;
-              margin: 10px 0;
-              font-weight: bold;
-            }
-            @media print {
-              body { margin: 0; padding: 0; }
-              .document-container { padding: 15mm; }
-              .page-break { page-break-before: always; }
-              @page { 
-                size: A4; 
-                margin: 15mm;
-                @bottom-right {
-                  content: "Page " counter(page) " of " counter(pages);
-                }
-                @bottom-left {
-                  content: "${reportId}";
-                }
+            
+            @page {
+              size: A4;
+              margin: 15mm;
+              @top-right {
+                content: "Page " counter(page);
+              }
+              @bottom-center {
+                content: "Report ID: ${reportId}";
               }
             }
-          </style>
-        </head>
-        <body>
-          <div class="document-container">
+          }
+          
+          /* Screen Preview Styles */
+          @media screen {
+            body {
+              background: #f0f0f0;
+              padding: 20px 0;
+            }
             
-            <!-- OFFICIAL HEADER -->
-            <div class="official-header">
-              <div class="government-seal">🏛️</div>
-              <div class="official-title">OFFICIAL ADMINISTRATIVE REPORT</div>
-              <div class="department-info">CAMPUS FACILITIES MANAGEMENT DEPARTMENT</div>
-              <div class="department-info">ROOM RESERVATION & ACADEMIC RESOURCES SYSTEM</div>
-              <div style="font-size: 10pt; margin-top: 10px;">CLASSIFICATION: INTERNAL USE - ADMINISTRATIVE</div>
-            </div>
+            .document-container {
+              box-shadow: 0 0 20px rgba(0,0,0,0.1);
+              margin: 20px auto;
+            }
             
-            <!-- DOCUMENT IDENTIFICATION -->
-            <div class="document-info">
-              <div>
-                <div class="doc-field">
-                  <span class="doc-label">REPORT ID:</span>
-                  <span>${reportId}</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">GENERATED:</span>
-                  <span>${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">PERIOD:</span>
-                  <span>Current System Status</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">AUTHORITY:</span>
-                  <span>System Administrator</span>
-                </div>
+            .print-notice {
+              position: fixed;
+              top: 10px;
+              right: 10px;
+              background: #007bff;
+              color: white;
+              padding: 10px 15px;
+              border-radius: 5px;
+              font-size: 12pt;
+              font-weight: bold;
+              z-index: 1000;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            }
+            
+            .print-controls {
+              position: fixed;
+              top: 10px;
+              left: 10px;
+              background: white;
+              padding: 15px;
+              border-radius: 5px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+              z-index: 1000;
+            }
+            
+            .print-btn {
+              background: #28a745;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 4px;
+              font-weight: bold;
+              cursor: pointer;
+              margin-right: 10px;
+            }
+            
+            .print-btn:hover {
+              background: #218838;
+            }
+            
+            .close-btn {
+              background: #6c757d;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 4px;
+              font-weight: bold;
+              cursor: pointer;
+            }
+            
+            .close-btn:hover {
+              background: #5a6268;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- Print Controls (only visible on screen) -->
+        <div class="print-controls">
+          <button class="print-btn" onclick="window.print()">🖨️ Print/Save as PDF</button>
+          <button class="close-btn" onclick="window.close()">❌ Close</button>
+        </div>
+        
+        <div class="print-notice">
+          📄 Report Preview - Use Ctrl+P or click Print button to save as PDF
+        </div>
+        
+        <div class="document-container">
+          
+          <!-- OFFICIAL HEADER -->
+          <div class="official-header">
+            <div class="government-seal">🏛️</div>
+            <div class="official-title">Campus Management System</div>
+            <div class="official-title" style="font-size: 16pt;">Official Administrative Report</div>
+            <div class="department-info">Facilities Management Department</div>
+            <div class="department-info">Room Reservation & Academic Resources System</div>
+            <div class="classification">Classification: Internal Use - Administrative Personnel</div>
+          </div>
+          
+          <!-- DOCUMENT IDENTIFICATION -->
+          <div class="document-info">
+            <div>
+              <div class="doc-field">
+                <span class="doc-label">Report ID:</span>
+                <span class="doc-value">${reportId}</span>
               </div>
-              <div>
-                <div class="doc-field">
-                  <span class="doc-label">DOCUMENT TYPE:</span>
-                  <span>Comprehensive System Report</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">SCOPE:</span>
-                  <span>Campus-wide Analysis</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">VERSION:</span>
-                  <span>1.0</span>
-                </div>
-                <div class="doc-field">
-                  <span class="doc-label">STATUS:</span>
-                  <span>OFFICIAL</span>
-                </div>
+              <div class="doc-field">
+                <span class="doc-label">Generated:</span>
+                <span class="doc-value">${currentDate.toLocaleDateString()} at ${currentDate.toLocaleTimeString()}</span>
               </div>
-            </div>
-            
-            <!-- TABLE OF CONTENTS -->
-            <div class="toc">
-              <h3 style="margin-top: 0; text-align: center; text-decoration: underline;">TABLE OF CONTENTS</h3>
-              <div class="toc-item">1. EXECUTIVE SUMMARY ................................................... Page 1</div>
-              <div class="toc-item">2. SYSTEM PERFORMANCE OVERVIEW ................................. Page 2</div>
-              <div class="toc-item">3. FACILITY UTILIZATION ANALYSIS ................................. Page 3</div>
-              <div class="toc-item">4. USER ACTIVITY ASSESSMENT ....................................... Page 4</div>
-              <div class="toc-item">5. ACADEMIC BRANCH OPERATIONS .................................... Page 5</div>
-              <div class="toc-item">6. REAL-TIME STATUS MONITORING ................................... Page 7</div>
-              <div class="toc-item">7. RESERVATION MANAGEMENT RECORDS ............................... Page 8</div>
-              <div class="toc-item">8. CONCLUSIONS AND RECOMMENDATIONS ............................. Page 9</div>
-              <div class="toc-item">9. OFFICIAL CERTIFICATIONS ........................................ Page 10</div>
-            </div>
-            
-            <!-- EXECUTIVE SUMMARY -->
-            <div class="page-break"></div>
-            <div class="section-header">1. EXECUTIVE SUMMARY</div>
-            <div class="executive-summary">
-              <h4 style="margin-top: 0;">SYSTEM STATUS OVERVIEW</h4>
-              <p><strong>This official report presents a comprehensive analysis of the Campus Room Management System as of ${currentDate.toLocaleDateString()}.</strong></p>
-              
-              <div class="critical-info">
-                <strong>KEY FINDINGS:</strong> The system currently manages ${stats.totalClassrooms || 0} classroom facilities, 
-                ${stats.activeReservations || 0} active reservations, and serves ${stats.totalUsers || 0} registered users 
-                across ${branchStatistics.totalBranches || 0} academic branches.
+              <div class="doc-field">
+                <span class="doc-label">Report Period:</span>
+                <span class="doc-value">Current System Status</span>
               </div>
-              
-              <p><strong>SCOPE OF ANALYSIS:</strong> This report encompasses facility utilization, user activity patterns, 
-              academic branch operations, real-time system monitoring, and comprehensive reservation management records.</p>
-              
-              <p><strong>DATA INTEGRITY:</strong> All data presented herein is sourced directly from the live campus management 
-              system and represents real-time operational status as of report generation time.</p>
-              
-              <p><strong>COMPLIANCE:</strong> This report is prepared in accordance with institutional reporting standards 
-              and administrative oversight requirements.</p>
-            </div>
-            
-            <!-- SYSTEM PERFORMANCE OVERVIEW -->
-            <div class="page-break"></div>
-            <div class="section-header">2. SYSTEM PERFORMANCE OVERVIEW</div>
-            
-            <div class="stats-section">
-              <h4 style="margin-top: 0;">OPERATIONAL METRICS</h4>
-              <div class="stats-grid">
-                <div class="stat-box">
-                  <span class="stat-number">${stats.totalClassrooms || 0}</span>
-                  <span class="stat-label">Total Facilities</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${stats.activeReservations || 0}</span>
-                  <span class="stat-label">Active Reservations</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${stats.pendingDemands || 0}</span>
-                  <span class="stat-label">Pending Approvals</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${stats.totalUsers || 0}</span>
-                  <span class="stat-label">Registered Users</span>
-                </div>
+              <div class="doc-field">
+                <span class="doc-label">Authority:</span>
+                <span class="doc-value">System Administrator</span>
               </div>
             </div>
+            <div>
+              <div class="doc-field">
+                <span class="doc-label">Document Type:</span>
+                <span class="doc-value">Comprehensive Analysis</span>
+              </div>
+              <div class="doc-field">
+                <span class="doc-label">Scope:</span>
+                <span class="doc-value">Campus-wide Operations</span>
+              </div>
+              <div class="doc-field">
+                <span class="doc-label">Version:</span>
+                <span class="doc-value">1.0</span>
+              </div>
+              <div class="doc-field">
+                <span class="doc-label">Status:</span>
+                <span class="doc-value">OFFICIAL</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- EXECUTIVE SUMMARY -->
+          <div class="section-header">Executive Summary</div>
+          <div class="executive-summary">
+            <h4>System Overview</h4>
+            <p><strong>This report provides a comprehensive analysis of the Campus Room Management System operational status as of ${currentDate.toLocaleDateString()}.</strong></p>
             
-            <div class="subsection-header">2.1 FACILITY STATUS SUMMARY</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>METRIC</th>
-                  <th>CURRENT VALUE</th>
-                  <th>STATUS</th>
-                  <th>REMARKS</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Total Classroom Facilities</td>
-                  <td>${stats.totalClassrooms || 0}</td>
-                  <td>OPERATIONAL</td>
-                  <td>${stats.classroomDetails || 'All facilities functional'}</td>
-                </tr>
-                <tr>
-                  <td>Active Reservations</td>
-                  <td>${stats.activeReservations || 0}</td>
-                  <td>MONITORING</td>
-                  <td>Currently approved bookings</td>
-                </tr>
-                <tr>
-                  <td>Pending Approval Requests</td>
-                  <td>${stats.pendingDemands || 0}</td>
-                  <td>${stats.pendingDemands > 10 ? 'ATTENTION REQUIRED' : 'NORMAL'}</td>
-                  <td>Awaiting administrative review</td>
-                </tr>
-                <tr>
-                  <td>System Users</td>
-                  <td>${stats.totalUsers || 0}</td>
-                  <td>ACTIVE</td>
-                  <td>${stats.userDetails || 'Registered active users'}</td>
-                </tr>
-                <tr>
-                  <td>Academic Groups</td>
-                  <td>${stats.totalClassGroups || 0}</td>
-                  <td>OPERATIONAL</td>
-                  <td>Active class group registrations</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="critical-info">
+              <strong>Key Performance Indicators:</strong><br>
+              • ${stats.totalClassrooms || 0} classroom facilities under management<br>
+              • ${stats.activeReservations || 0} active reservations currently approved<br>
+              • ${stats.totalUsers || 0} registered users across the system<br>
+              • ${branchStatistics.totalBranches || 0} academic branches operational<br>
+              • ${stats.pendingDemands || 0} requests pending administrative approval
+            </div>
             
-            <!-- FACILITY UTILIZATION ANALYSIS -->
-            <div class="page-break"></div>
-            <div class="section-header">3. FACILITY UTILIZATION ANALYSIS</div>
+            <p><strong>Data Integrity:</strong> All information in this report is sourced directly from the live campus management database and represents real-time operational status.</p>
             
-            <div class="subsection-header">3.1 ROOM PERFORMANCE METRICS</div>
-            <table class="official-table">
-              <thead>
+            <p><strong>Operational Status:</strong> The system is functioning within normal parameters with ${stats.pendingDemands > 10 ? 'elevated' : 'normal'} approval queue levels.</p>
+          </div>
+          
+          <!-- SYSTEM PERFORMANCE OVERVIEW -->
+          <div class="section-header">System Performance Metrics</div>
+          
+          <div class="stats-section">
+            <h4 style="margin-top: 0; text-align: center;">Current Operational Statistics</h4>
+            <div class="stats-grid">
+              <div class="stat-box">
+                <span class="stat-number">${stats.totalClassrooms || 0}</span>
+                <span class="stat-label">Total Facilities</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">${stats.activeReservations || 0}</span>
+                <span class="stat-label">Active Bookings</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">${stats.pendingDemands || 0}</span>
+                <span class="stat-label">Pending Requests</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">${stats.totalUsers || 0}</span>
+                <span class="stat-label">System Users</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">${branchStatistics.totalBranches || 0}</span>
+                <span class="stat-label">Academic Branches</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">${branchStatistics.totalStudents || 0}</span>
+                <span class="stat-label">Total Students</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="subsection-header">System Status Summary</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Current Value</th>
+                <th>Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Classroom Facilities</strong></td>
+                <td>${stats.totalClassrooms || 0}</td>
+                <td><span class="status-approved">OPERATIONAL</span></td>
+                <td>${stats.classroomDetails || 'All facilities available'}</td>
+              </tr>
+              <tr>
+                <td><strong>Active Reservations</strong></td>
+                <td>${stats.activeReservations || 0}</td>
+                <td><span class="status-approved">${stats.activeReservations > 0 ? 'ACTIVE' : 'NORMAL'}</span></td>
+                <td>Currently approved bookings in system</td>
+              </tr>
+              <tr>
+                <td><strong>Pending Approvals</strong></td>
+                <td>${stats.pendingDemands || 0}</td>
+                <td><span class="${stats.pendingDemands > 10 ? 'status-pending' : 'status-approved'}">${stats.pendingDemands > 10 ? 'ATTENTION NEEDED' : 'NORMAL'}</span></td>
+                <td>Requests awaiting administrative review</td>
+              </tr>
+              <tr>
+                <td><strong>Registered Users</strong></td>
+                <td>${stats.totalUsers || 0}</td>
+                <td><span class="status-approved">ACTIVE</span></td>
+                <td>${stats.userDetails || 'Users with system access'}</td>
+              </tr>
+              <tr>
+                <td><strong>Academic Branches</strong></td>
+                <td>${branchStatistics.totalBranches || 0}</td>
+                <td><span class="status-approved">OPERATIONAL</span></td>
+                <td>Active academic departments</td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <!-- FACILITY UTILIZATION -->
+          <div class="section-header">Facility Utilization Analysis</div>
+          
+          <div class="subsection-header">Room Performance Statistics</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>Room Name</th>
+                <th>Total Bookings</th>
+                <th>Utilization Rate</th>
+                <th>Current Status</th>
+                <th>Primary Users</th>
+                <th>Most Common Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detailedRoomData.slice(0, 15).map(room => `
                 <tr>
-                  <th>FACILITY NAME</th>
-                  <th>TOTAL BOOKINGS</th>
-                  <th>UTILIZATION RATE</th>
-                  <th>PRIMARY USER CATEGORY</th>
-                  <th>CURRENT STATUS</th>
-                  <th>OPERATIONAL NOTES</th>
+                  <td><strong>${room.roomName}</strong></td>
+                  <td>${room.totalBookings}</td>
+                  <td>${room.usagePercentage}%</td>
+                  <td><span class="${room.currentBookings.length > 0 ? 'status-pending' : 'status-approved'}">${room.currentBookings.length > 0 ? 'OCCUPIED' : 'AVAILABLE'}</span></td>
+                  <td>Prof: ${room.bookingsByRole.professor} | Students: ${room.bookingsByRole.student} | Admin: ${room.bookingsByRole.admin}</td>
+                  <td>${room.topPurpose[0]} (${room.topPurpose[1]} times)</td>
                 </tr>
-              </thead>
-              <tbody>
-                ${detailedRoomData.slice(0, 20).map(room => `
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <!-- USER ACTIVITY ANALYSIS -->
+          <div class="section-header">User Activity Assessment</div>
+          
+          <div class="subsection-header">Top System Users</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>User Name</th>
+                <th>Role</th>
+                <th>Total Bookings</th>
+                <th>Success Rate</th>
+                <th>Preferred Room</th>
+                <th>Last Activity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detailedUserActivity.slice(0, 20).map(user => `
+                <tr>
+                  <td><strong>${user.userName}</strong></td>
+                  <td>${user.role.toUpperCase()}</td>
+                  <td>${user.totalBookings}</td>
+                  <td>${user.successRate}%</td>
+                  <td>${user.favoriteRoom[0]} (${user.favoriteRoom[1]}x)</td>
+                  <td>${user.lastBookingDate || 'N/A'}</td>
+                  <td><span class="${user.successRate >= 80 ? 'status-approved' : user.successRate >= 50 ? 'status-pending' : 'status-cancelled'}">${user.successRate >= 80 ? 'ACTIVE' : user.successRate >= 50 ? 'MODERATE' : 'INACTIVE'}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <!-- BRANCH OPERATIONS -->
+          <div class="section-header">Academic Branch Operations</div>
+          
+          <div class="subsection-header">Branch Performance Overview</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>Branch Name</th>
+                <th>Total Students</th>
+                <th>Active Students</th>
+                <th>Course Offerings</th>
+                <th>Avg Students/Course</th>
+                <th>Performance Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${branchesData.map((branch, index) => `
+                <tr>
+                  <td><strong>${branch.name}</strong></td>
+                  <td>${branch.totalStudents}</td>
+                  <td>${branch.activeStudents}</td>
+                  <td>${branch.totalCourses}</td>
+                  <td>${branch.averageStudentsPerClass}</td>
+                  <td><span class="status-approved">${index === 0 ? 'EXCELLENT' : index < 3 ? 'GOOD' : 'SATISFACTORY'}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <!-- CURRENT RESERVATIONS -->
+          <div class="section-header">Current Reservation Status</div>
+          
+          <div class="subsection-header">Recent Reservations</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>Reservation ID</th>
+                <th>Room</th>
+                <th>User</th>
+                <th>Role</th>
+                <th>Date & Time</th>
+                <th>Purpose</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentReservations.slice(0, 25).map(reservation => `
+                <tr>
+                  <td><strong>${reservation.id}</strong></td>
+                  <td>${reservation.classroom}</td>
+                  <td>${reservation.reservedBy}</td>
+                  <td>${reservation.role?.toUpperCase()}</td>
+                  <td>${reservation.date} ${reservation.time}</td>
+                  <td>${reservation.purpose || 'Standard booking'}</td>
+                  <td><span class="status-${reservation.status?.toLowerCase()}">${reservation.status?.toUpperCase()}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          ${pendingDemands.length > 0 ? `
+          <div class="subsection-header">Pending Approval Requests</div>
+          <table class="official-table">
+            <thead>
+              <tr>
+                <th>Request ID</th>
+                <th>Room</th>
+                <th>Requested By</th>
+                <th>Role</th>
+                <th>Requested Date/Time</th>
+                <th>Purpose</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pendingDemands.map((demand, index) => {
+                const submissionDate = new Date(demand.date);
+                const daysPending = Math.floor((currentDate - submissionDate) / (1000 * 60 * 60 * 24));
+                return `
                   <tr>
-                    <td><strong>${room.roomName}</strong></td>
-                    <td>${room.totalBookings}</td>
-                    <td>${room.usagePercentage}%</td>
-                    <td>Professor: ${room.bookingsByRole.professor}, Student: ${room.bookingsByRole.student}, Admin: ${room.bookingsByRole.admin}</td>
-                    <td>${room.currentBookings.length > 0 ? 'OCCUPIED' : 'AVAILABLE'}</td>
-                    <td>Most frequent user: ${room.topUser[0]} (${room.topUser[1]} bookings)</td>
+                    <td><strong>${demand.id}</strong></td>
+                    <td>${demand.classroom}</td>
+                    <td>${demand.reservedBy || demand.requestedBy}</td>
+                    <td>${demand.role?.toUpperCase()}</td>
+                    <td>${demand.date} ${demand.time}</td>
+                    <td>${demand.purpose || 'Standard request'}</td>
+                    <td><span class="${daysPending > 7 ? 'status-cancelled' : daysPending > 3 ? 'status-pending' : 'status-approved'}">${daysPending > 7 ? 'HIGH' : daysPending > 3 ? 'MEDIUM' : 'NORMAL'}</span></td>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          ` : ''}
+          
+          <!-- RECOMMENDATIONS -->
+          <div class="section-header">Conclusions and Recommendations</div>
+          
+          <div class="executive-summary">
+            <h4>Operational Assessment</h4>
             
-            <!-- USER ACTIVITY ASSESSMENT -->
-            <div class="page-break"></div>
-            <div class="section-header">4. USER ACTIVITY ASSESSMENT</div>
+            <p><strong>System Performance:</strong> The Campus Room Management System is operating effectively with ${stats.totalClassrooms || 0} managed facilities and ${stats.activeReservations || 0} active reservations.</p>
             
-            <div class="subsection-header">4.1 USER ENGAGEMENT ANALYSIS</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>USER IDENTIFICATION</th>
-                  <th>ROLE CLASSIFICATION</th>
-                  <th>TOTAL RESERVATIONS</th>
-                  <th>SUCCESS RATE</th>
-                  <th>PREFERRED FACILITY</th>
-                  <th>LAST ACTIVITY</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${detailedUserActivity.slice(0, 25).map(user => `
-                  <tr>
-                    <td><strong>${user.userName}</strong></td>
-                    <td>${user.role.toUpperCase()}</td>
-                    <td>${user.totalBookings}</td>
-                    <td>${user.successRate}%</td>
-                    <td>${user.favoriteRoom[0]} (${user.favoriteRoom[1]} times)</td>
-                    <td>${user.lastBookingDate || 'N/A'}</td>
-                    <td>${user.successRate >= 80 ? 'ACTIVE' : user.successRate >= 50 ? 'MODERATE' : 'INACTIVE'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+            <p><strong>Utilization Analysis:</strong> Current facility utilization shows ${roomOccupancy.filter(r => r.isOccupied).length} of ${roomOccupancy.length} rooms currently occupied (${roomOccupancy.length > 0 ? ((roomOccupancy.filter(r => r.isOccupied).length / roomOccupancy.length) * 100).toFixed(1) : 0}% occupancy rate).</p>
             
-            <div class="subsection-header">4.2 RESERVATION STATUS BREAKDOWN</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>USER CATEGORY</th>
-                  <th>APPROVED RESERVATIONS</th>
-                  <th>PENDING RESERVATIONS</th>
-                  <th>CANCELLED RESERVATIONS</th>
-                  <th>TOTAL REQUESTS</th>
-                  <th>APPROVAL RATE</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(() => {
-                  const roleStats = { professor: {approved: 0, pending: 0, cancelled: 0}, student: {approved: 0, pending: 0, cancelled: 0}, admin: {approved: 0, pending: 0, cancelled: 0} };
-                  detailedUserActivity.forEach(user => {
-                    const role = user.role.toLowerCase();
-                    if (roleStats[role]) {
-                      roleStats[role].approved += user.bookingsByStatus.approved;
-                      roleStats[role].pending += user.bookingsByStatus.pending;
-                      roleStats[role].cancelled += user.bookingsByStatus.cancelled;
-                    }
-                  });
-                  return Object.entries(roleStats).map(([role, stats]) => {
-                    const total = stats.approved + stats.pending + stats.cancelled;
-                    const rate = total > 0 ? ((stats.approved / total) * 100).toFixed(1) : 0;
-                    return `
-                      <tr>
-                        <td><strong>${role.toUpperCase()}</strong></td>
-                        <td>${stats.approved}</td>
-                        <td>${stats.pending}</td>
-                        <td>${stats.cancelled}</td>
-                        <td>${total}</td>
-                        <td>${rate}%</td>
-                      </tr>
-                    `;
-                  }).join('');
-                })()}
-              </tbody>
-            </table>
+            <p><strong>Pending Matters:</strong> ${stats.pendingDemands || 0} reservation requests await approval. ${stats.pendingDemands > 10 ? 'Immediate attention recommended to process pending requests.' : 'Current pending volume is manageable.'}</p>
             
-            <!-- ACADEMIC BRANCH OPERATIONS -->
-            <div class="page-break"></div>
-            <div class="section-header">5. ACADEMIC BRANCH OPERATIONS</div>
+            <p><strong>Academic Integration:</strong> ${branchStatistics.totalBranches || 0} academic branches actively use the system with ${branchStatistics.totalStudents || 0} students enrolled across ${branchStatistics.totalClassGroups || 0} courses.</p>
             
-            <div class="subsection-header">5.1 INSTITUTIONAL BRANCH OVERVIEW</div>
-            <div class="stats-section">
-              <div class="stats-grid">
-                <div class="stat-box">
-                  <span class="stat-number">${branchStatistics.totalBranches || 0}</span>
-                  <span class="stat-label">Academic Branches</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${branchStatistics.totalStudents || 0}</span>
-                  <span class="stat-label">Total Students</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${branchStatistics.totalClassGroups || 0}</span>
-                  <span class="stat-label">Active Courses</span>
-                </div>
-                <div class="stat-box">
-                  <span class="stat-number">${branchStatistics.averageStudentsPerBranch || 0}</span>
-                  <span class="stat-label">Avg Students/Branch</span>
-                </div>
+            <div class="critical-info">
+              <strong>Administrative Recommendations:</strong><br>
+              1. ${stats.pendingDemands > 10 ? 'Prioritize processing pending approval requests' : 'Maintain current approval processing schedule'}<br>
+              2. Monitor facility utilization trends for capacity planning<br>
+              3. Continue regular system maintenance and user training<br>
+              4. Consider facility expansion if utilization exceeds 85% consistently
+            </div>
+          </div>
+          
+          <!-- SIGNATURE SECTION -->
+          <div class="signature-section">
+            <h4 style="margin-top: 0;">Document Authentication</h4>
+            
+            <p>This report has been generated from the live Campus Management System database and represents accurate operational data as of the generation timestamp.</p>
+            
+            <p><strong>Report Validity:</strong> This document is official for administrative use and may be referenced for operational planning and institutional reporting.</p>
+            
+            <div class="signature-grid">
+              <div class="signature-block">
+                <div class="signature-line"></div>
+                <strong>System Administrator</strong><br>
+                Campus Facilities Management<br>
+                Date: ${currentDate.toLocaleDateString()}
+              </div>
+              <div class="signature-block">
+                <div class="signature-line"></div>
+                <strong>Department Head</strong><br>
+                Academic Operations<br>
+                Date: _________________
               </div>
             </div>
             
-            <div class="subsection-header">5.2 BRANCH PERFORMANCE ANALYSIS</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>BRANCH DESIGNATION</th>
-                  <th>ENROLLED STUDENTS</th>
-                  <th>ACTIVE STUDENTS</th>
-                  <th>COURSE OFFERINGS</th>
-                  <th>GENDER DISTRIBUTION</th>
-                  <th>PERFORMANCE RATING</th>
-                  <th>OPERATIONAL STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${branchesData.map((branch, index) => `
-                  <tr>
-                    <td><strong>${branch.name}</strong></td>
-                    <td>${branch.totalStudents}</td>
-                    <td>${branch.activeStudents}</td>
-                    <td>${branch.totalCourses}</td>
-                    <td>M: ${branch.studentsByGender?.male || 0}, F: ${branch.studentsByGender?.female || 0}</td>
-                    <td>${index === 0 ? 'EXCELLENT' : index < 3 ? 'GOOD' : 'SATISFACTORY'}</td>
-                    <td>OPERATIONAL</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <div class="subsection-header">5.3 ENROLLMENT TRENDS BY ACADEMIC YEAR</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>BRANCH</th>
-                  <th>ENROLLMENT YEAR</th>
-                  <th>STUDENT COUNT</th>
-                  <th>PERCENTAGE OF BRANCH</th>
-                  <th>TREND ANALYSIS</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${branchesData.map(branch => 
-                  (branch.studentsByYear || []).map(yearData => {
-                    const percentage = branch.totalStudents > 0 ? (yearData.count / branch.totalStudents * 100).toFixed(1) : 0;
-                    return `
-                      <tr>
-                        <td>${branch.name}</td>
-                        <td>${yearData.year}</td>
-                        <td>${yearData.count}</td>
-                        <td>${percentage}%</td>
-                        <td>${yearData.year >= 2023 ? 'RECENT' : yearData.year >= 2020 ? 'CURRENT' : 'LEGACY'}</td>
-                      </tr>
-                    `;
-                  }).join('')
-                ).join('')}
-              </tbody>
-            </table>
-            
-            <!-- REAL-TIME STATUS MONITORING -->
-            <div class="page-break"></div>
-            <div class="section-header">6. REAL-TIME STATUS MONITORING</div>
-            
-            <div class="subsection-header">6.1 CURRENT FACILITY OCCUPANCY</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>FACILITY IDENTIFIER</th>
-                  <th>CURRENT STATUS</th>
-                  <th>OCCUPANT DETAILS</th>
-                  <th>RESERVATION TIME</th>
-                  <th>PURPOSE</th>
-                  <th>NEXT SCHEDULED</th>
-                  <th>TODAY'S BOOKINGS</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${roomOccupancy.map(room => `
-                  <tr>
-                    <td><strong>${room.roomName}</strong></td>
-                    <td class="${room.isOccupied ? 'status-pending' : 'status-approved'}">${room.isOccupied ? 'OCCUPIED' : 'AVAILABLE'}</td>
-                    <td>${room.currentReservation ? `${room.currentReservation.user} (${room.currentReservation.role})` : 'None'}</td>
-                    <td>${room.currentReservation ? `${room.currentReservation.startTime} - ${room.currentReservation.endTime}` : 'N/A'}</td>
-                    <td>${room.currentReservation?.purpose || 'N/A'}</td>
-                    <td>${room.nextReservation ? `${room.nextReservation.user} at ${room.nextReservation.time}` : 'None scheduled'}</td>
-                    <td>${room.todayReservations}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <!-- RESERVATION MANAGEMENT RECORDS -->
-            <div class="page-break"></div>
-            <div class="section-header">7. RESERVATION MANAGEMENT RECORDS</div>
-            
-            <div class="subsection-header">7.1 RECENT RESERVATION ACTIVITY</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>RESERVATION ID</th>
-                  <th>FACILITY</th>
-                  <th>REQUESTING PARTY</th>
-                  <th>ROLE</th>
-                  <th>SCHEDULED DATE/TIME</th>
-                  <th>PURPOSE</th>
-                  <th>STATUS</th>
-                  <th>APPROVAL DATE</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${recentReservations.slice(0, 30).map(reservation => `
-                  <tr>
-                    <td><strong>${reservation.id}</strong></td>
-                    <td>${reservation.classroom}</td>
-                    <td>${reservation.reservedBy}</td>
-                    <td>${reservation.role?.toUpperCase()}</td>
-                    <td>${reservation.date} ${reservation.time}</td>
-                    <td>${reservation.purpose || 'Standard booking'}</td>
-                    <td class="status-${reservation.status?.toLowerCase()}">${reservation.status?.toUpperCase()}</td>
-                    <td>${reservation.status === 'approved' ? reservation.date : 'Pending'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <div class="subsection-header">7.2 PENDING APPROVAL REQUESTS</div>
-            <table class="official-table">
-              <thead>
-                <tr>
-                  <th>REQUEST ID</th>
-                  <th>FACILITY REQUESTED</th>
-                  <th>REQUESTING PARTY</th>
-                  <th>SUBMISSION DATE</th>
-                  <th>REQUESTED DATE/TIME</th>
-                  <th>PURPOSE</th>
-                  <th>PRIORITY LEVEL</th>
-                  <th>DAYS PENDING</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${pendingDemands.map((demand, index) => {
-                  const submissionDate = new Date(demand.date);
-                  const daysPending = Math.floor((currentDate - submissionDate) / (1000 * 60 * 60 * 24));
-                  return `
-                    <tr>
-                      <td><strong>${demand.id}</strong></td>
-                      <td>${demand.classroom}</td>
-                      <td>${demand.reservedBy || demand.requestedBy}</td>
-                      <td>${demand.date}</td>
-                      <td>${demand.date} ${demand.time}</td>
-                      <td>${demand.purpose || 'Standard request'}</td>
-                      <td>${daysPending > 7 ? 'HIGH' : daysPending > 3 ? 'MEDIUM' : 'NORMAL'}</td>
-                      <td>${daysPending} days</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-            
-            <!-- CONCLUSIONS AND RECOMMENDATIONS -->
-            <div class="page-break"></div>
-            <div class="section-header">8. CONCLUSIONS AND RECOMMENDATIONS</div>
-            
-            <div class="executive-summary">
-              <h4 style="margin-top: 0;">OPERATIONAL ASSESSMENT</h4>
-              
-              <p><strong>SYSTEM PERFORMANCE:</strong> The Campus Room Management System is operating within normal parameters 
-              with ${stats.totalClassrooms || 0} facilities under management and ${stats.activeReservations || 0} active reservations.</p>
-              
-              <p><strong>UTILIZATION EFFICIENCY:</strong> Current facility utilization rates indicate 
-              ${roomOccupancy.filter(r => r.isOccupied).length} of ${roomOccupancy.length} rooms are currently occupied 
-              (${roomOccupancy.length > 0 ? ((roomOccupancy.filter(r => r.isOccupied).length / roomOccupancy.length) * 100).toFixed(1) : 0}% occupancy rate).</p>
-              
-              <p><strong>PENDING MATTERS:</strong> ${stats.pendingDemands || 0} reservation requests await administrative approval. 
-              ${stats.pendingDemands > 10 ? 'IMMEDIATE ATTENTION REQUIRED to clear approval backlog.' : 'Current pending volume is within acceptable limits.'}</p>
-              
-              <p><strong>ACADEMIC INTEGRATION:</strong> ${branchStatistics.totalBranches || 0} academic branches are actively 
-              utilizing the system with ${branchStatistics.totalStudents || 0} registered students across ${branchStatistics.totalClassGroups || 0} course offerings.</p>
-              
-              <div class="critical-info">
-                <strong>ADMINISTRATIVE RECOMMENDATIONS:</strong>
-                <br>1. ${stats.pendingDemands > 10 ? 'Prioritize processing of pending approval requests' : 'Maintain current approval processing schedule'}
-                <br>2. ${branchStatistics.totalBranches > 0 ? 'Continue monitoring branch-level utilization patterns' : 'Implement branch-level tracking system'}
-                <br>3. Regular system maintenance and user activity monitoring should continue
-                <br>4. Consider facility expansion if utilization consistently exceeds 85%
-              </div>
+            <div class="official-seal">
+              <strong>🏛️ OFFICIAL DOCUMENT 🏛️</strong><br>
+              <strong>Campus Administration</strong><br>
+              Report ID: ${reportId}<br>
+              Generated: ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}
             </div>
+          </div>
+          
+          <!-- FOOTER -->
+          <div class="official-footer">
+            <strong>Campus Facilities Management Department</strong><br>
+            Room Reservation & Academic Resources System<br>
+            <strong>Report ID:</strong> ${reportId} | <strong>Generated:</strong> ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}<br>
+            <em>This document contains official administrative data - Handle according to institutional policies</em>
             
-            <!-- OFFICIAL CERTIFICATIONS -->
-            <div class="page-break"></div>
-            <div class="section-header">9. OFFICIAL CERTIFICATIONS</div>
-            
-            <div class="signature-section">
-              <h4 style="margin-top: 0;">DOCUMENT AUTHENTICATION</h4>
-              
-              <p>I hereby certify that the information contained in this official report is accurate and complete 
-              as of the date of generation. All data has been extracted directly from the live campus management system 
-              and represents the current operational status of the facility reservation system.</p>
-              
-              <p><strong>REPORT VALIDITY:</strong> This document is considered official for administrative purposes 
-              and may be referenced in operational planning, resource allocation, and institutional reporting.</p>
-              
-              <p><strong>DATA CLASSIFICATION:</strong> Internal Use - Administrative Personnel Only</p>
-              
-              <div class="signature-grid">
-                <div class="signature-block">
-                  <div class="signature-line"></div>
-                  <strong>System Administrator</strong><br>
-                  Campus Facilities Management<br>
-                  Date: ${currentDate.toLocaleDateString()}
-                </div>
-                <div class="signature-block">
-                  <div class="signature-line"></div>
-                  <strong>Department Head</strong><br>
-                  Academic Operations<br>
-                  Date: _________________
-                </div>
-              </div>
-              
-              <div style="margin-top: 30px; text-align: center; border: 1px solid #000; padding: 15px;">
-                <strong>OFFICIAL SEAL</strong><br>
-                <div style="margin: 10px 0; font-size: 14pt;">🏛️</div>
-                <strong>CAMPUS ADMINISTRATION</strong><br>
-                Document ID: ${reportId}<br>
-                Generated: ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}
-              </div>
-            </div>
-            
-            <!-- OFFICIAL FOOTER -->
-            <div class="official-footer">
-              <div style="border-top: 2px solid #000; padding-top: 10px;">
-                <strong>CAMPUS FACILITIES MANAGEMENT DEPARTMENT</strong><br>
-                Room Reservation & Academic Resources System<br>
-                Report ID: ${reportId} | Generated: ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}<br>
-                <em>This document contains official administrative data - Handle in accordance with institutional policies</em>
-              </div>
-            </div>
-            
-            <!-- END OF DOCUMENT -->
-            <div style="text-align: center; margin-top: 30px; font-weight: bold; font-size: 14pt;">
+            <div style="margin-top: 15px; font-weight: bold; font-size: 12pt;">
               === END OF OFFICIAL REPORT ===
             </div>
-            
           </div>
-        </body>
-        </html>
-      `;
-      
-      printWindow.document.write(pdfContent);
-      printWindow.document.close();
-      
-      // Wait for content to load then print
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 1000);
-      };
-      
-      setMessage({
-        text: `Official administrative report (ID: ${reportId}) has been generated and sent to your printer/PDF viewer`,
-        type: 'success'
-      });
-      
-    } catch (error) {
-      console.error('Error exporting to PDF:', error);
-      setError('Failed to export official PDF report: ' + (error.message || 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+          
+        </div>
+        
+        <script>
+          // Auto-focus on print dialog when page loads
+          window.onload = function() {
+            // Add some delay to ensure styles are loaded
+            setTimeout(function() {
+              console.log('Report preview loaded successfully');
+              // Auto-print can be enabled by uncommenting the next line
+              // window.print();
+            }, 1000);
+          };
+          
+          // Handle print button click
+          function printReport() {
+            window.print();
+          }
+          
+          // Handle close button click
+          function closeReport() {
+            window.close();
+          }
+          
+          // Add keyboard shortcuts
+          document.addEventListener('keydown', function(e) {
+            // Ctrl+P for print
+            if (e.ctrlKey && e.key === 'p') {
+              e.preventDefault();
+              window.print();
+            }
+            // Escape to close
+            if (e.key === 'Escape') {
+              window.close();
+            }
+          });
+        </script>
+        
+      </body>
+      </html>
+    `;
+    
+    // Write content to the new window
+    printWindow.document.write(pdfContent);
+    printWindow.document.close();
+    
+    // Set focus to the new window
+    printWindow.focus();
+    
+    setMessage({
+      text: `Report preview opened successfully! Report ID: ${reportId}. Use Ctrl+P to print/save as PDF or click the Print button.`,
+      type: 'success'
+    });
+    
+  } catch (error) {
+    console.error('Error exporting report:', error);
+    setError('Failed to generate report: ' + (error.message || 'Unknown error'));
+  } finally {
+    setLoading(false);
+  }
+};
   // Event handlers
   const handleRefresh = () => {
     console.log("Refreshing REAL detailed reports");
@@ -1524,10 +1439,10 @@ const AdminReports = () => {
       <div className="elegant-header">
         <div className="header-content">
           <h1>📊 System Analytics & Detailed Reports</h1>
-          <p className="header-subtitle">Comprehensive view of campus room booking system with REAL branch data</p>
+         
           {lastUpdated && (
             <div className="last-updated-info">
-              🕒 Last updated: {lastUpdated.toLocaleString()} | 🔄 Synced with Real Data
+              🕒 Last updated: {lastUpdated.toLocaleString()} 
             </div>
           )}
         </div>
@@ -1541,22 +1456,7 @@ const AdminReports = () => {
           >
             <i className="fas fa-sync-alt"></i> Refresh
           </button>
-          <button 
-            className="btn-elegant regenerate"
-            onClick={handleRegenerate}
-            disabled={loading}
-            title="Clear cache and regenerate"
-          >
-            <i className="fas fa-redo"></i> Regenerate
-          </button>
-          <button 
-            className="btn-elegant export-excel"
-            onClick={exportToExcel}
-            disabled={loading || branchesData.length === 0}
-            title="Export branch data to Excel"
-          >
-            <i className="fas fa-file-excel"></i> Export Excel
-          </button>
+         
           <button 
             className="btn-elegant export-pdf"
             onClick={exportToPDF}
@@ -1903,15 +1803,9 @@ const AdminReports = () => {
         <>
           {/* Branch Overview Statistics */}
           <div className="elegant-section">
-            <h2 className="section-title">🏛️ REAL Branch Analytics Overview</h2>
+            <h2 className="section-title">🏛️ Branch Analytics Overview</h2>
             <div className="export-info">
-              <div className="info-banner export-banner">
-                <i className="fas fa-download"></i>
-                <span>
-                  Export comprehensive branch reports including student demographics, course distribution, 
-                  enrollment trends, and detailed analytics in Excel or PDF format
-                </span>
-              </div>
+              
             </div>
             <div className="stats-grid elegant">
               <div className="stat-card elegant primary">
@@ -1993,13 +1887,8 @@ const AdminReports = () => {
 
           {/* Individual Branch Details using REAL DATA */}
           <div className="elegant-section">
-            <h2 className="section-title">📚 REAL Branch Information (Same as Class Group Page)</h2>
-            <div className="data-source-info">
-              <div className="info-banner">
-                <i className="fas fa-check-circle"></i>
-                <span>This data is synchronized with the Class Group Management page and uses the same API endpoints</span>
-              </div>
-            </div>
+            <h2 className="section-title">📚  Branch Information </h2>
+           
             <div className="branch-cards-grid">
               {branchesData.length === 0 ? (
                 <div className="no-data-message elegant">

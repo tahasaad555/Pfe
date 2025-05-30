@@ -300,50 +300,7 @@ const ReservationsList = () => {
     }
   };
 
-  // Mark a reservation as used
-  const markAsUsed = async (id) => {
-    if (!window.confirm('Mark this reservation as used?')) return;
-    
-    setIsLoading(true);
-    
-    try {
-      let response;
-      try {
-        response = await API.put(`/api/admin/mark-used-reservation/${id}`);
-      } catch (err) {
-        console.log("Falling back to reservations used endpoint");
-        response = await API.put(`/api/reservations/${id}/mark-used`);
-      }
-      
-      if (!response || !response.data) {
-        throw new Error("Invalid response from server");
-      }
-      
-      console.log("Reservation marked as used:", response.data);
-      
-      // Update local state
-      const updatedReservations = reservations.map(res => 
-        res.id === id ? { ...res, status: 'USED' } : res
-      );
-      
-      setReservations(updatedReservations);
-      setFilteredReservations(
-        filteredReservations.map(res => res.id === id ? { ...res, status: 'USED' } : res)
-      );
-      
-      // Close modal if open
-      if (showDetailModal && selectedReservation && selectedReservation.id === id) {
-        setShowDetailModal(false);
-      }
-      
-      alert("Reservation marked as used successfully");
-    } catch (err) {
-      console.error("Error marking reservation as used:", err);
-      alert("Failed to mark reservation as used. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   // Format date for display
   const formatDate = (dateString) => {
@@ -510,13 +467,7 @@ const ReservationsList = () => {
                           )}
                           {reservation.status === 'APPROVED' && (
                             <>
-                              <button 
-                                className="btn-table btn-edit"
-                                onClick={() => markAsUsed(reservation.id)}
-                                disabled={isLoading}
-                              >
-                                Mark as Used
-                              </button>
+                             
                               <button 
                                 className="btn-table btn-delete"
                                 onClick={() => cancelReservation(reservation.id)}
@@ -607,13 +558,8 @@ const ReservationsList = () => {
               )}
               {selectedReservation.status === 'APPROVED' && (
                 <>
-                  <button 
-                    className="btn-success mr-3"
-                    onClick={() => markAsUsed(selectedReservation.id)}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Processing...' : 'Mark as Used'}
-                  </button>
+                 
+                 
                   <button 
                     className="btn-danger"
                     onClick={() => cancelReservation(selectedReservation.id)}
